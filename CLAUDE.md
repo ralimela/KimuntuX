@@ -1,782 +1,213 @@
-# CLAUDE.md — KimuX CRM Development Guide
+# CLAUDE.md — KimuX Developer Reference
 
-## Current Status (as of April 2026)
+## Project Status
 
-The CRM module is fully built and wired end-to-end. This is not a prototype — every page talks to the real backend.
-
-**Backend**
-- 11 SQLAlchemy models with Alembic migrations: Tenant, TenantMembership, User, Lead, Activity, Communication, Campaign, Offer, Integration, IntegrationCredential, WebhookEvent
-- 40+ CRM API endpoints under `/api/v1/crm/` — all require JWT auth + tenant resolution (`X-Tenant-ID` header or `default_tenant_id`)
-- Webhook endpoints under `/api/v1/webhooks/` — no auth (SendGrid calls these); `POST /sendgrid/events`, `POST /sendgrid/inbound`
-- Service layer: `lead_service`, `campaign_service`, `offer_service`, `communication_service`, `integration_service`, `dashboard_service`, `ai_service`
-- Gemini AI integration (gemini-2.5-flash via `google-genai`) for lead scoring and outreach generation; rule-based fallback when key is absent or call fails
-- Contact-to-lead pipeline: every landing page form submission automatically creates a CRM lead assigned to the system tenant
-- Seed script at `backend/app/scripts/seed.py` — run with `python -m app.scripts.seed` (creates KimuX Demo tenant; **DEV ONLY:** also grants all existing users membership to demo tenant so dev accounts see data — remove before production)
-- **123 passing integration tests** including 7 tenant isolation tests + 15 ClickBank/account tests + 11 offer catalog tests + 16 reply-token/signature tests + 16 communication-service tests + 14 webhook-endpoint tests + 11 SendGrid-integration tests: `cd backend && python -m pytest tests/ -v`
-- Multi-tenancy: every query in every service is filtered by `tenant_id`; `SYSTEM_TENANT_ID = "00000000-0000-0000-0000-000000000001"` holds contact-form leads + curated offers
-- Fernet encryption for tenant credentials (`KIMUX_FERNET_KEY` env var); `backend/app/core/encryption.py`
-- ClickBank API client at `backend/app/integrations/clickbank.py` — single developer key, `Authorization: <key>` header (post-Aug 2023 auth model)
-- SendGrid client at `backend/app/integrations/sendgrid_client.py` — outbound send + ECDSA-P256 signature verification for event/inbound webhooks
-- Reply-to address tokens at `backend/app/core/reply_tokens.py` — HMAC-SHA256, base64url-encoded, encode `tenant_id:lead_id:comm_id` for inbound routing
-- Fail-fast: server refuses to start if `KIMUX_FERNET_KEY` or `KIMUX_REPLY_TOKEN_SECRET` is missing; also fails if `SENDGRID_API_KEY` is set without `SENDGRID_EVENT_WEBHOOK_PUBLIC_KEY`
-
-**Required env vars** (see `backend/.env.example` for full documentation):
-- `KIMUX_FERNET_KEY` — Fernet key for tenant credential encryption. Generate: `python -m app.scripts.generate_fernet_key`
-- `KIMUX_REPLY_TOKEN_SECRET` — HMAC secret for reply-to address tokens. Generate: `python -c "import secrets; print(secrets.token_hex(32))"`
-- `SENDGRID_API_KEY` — Platform SendGrid account key. Optional in dev; required for outbound email.
-- `SENDGRID_EVENT_WEBHOOK_PUBLIC_KEY` — ECDSA public key from SendGrid Mail Settings → Event Webhook. Required if `SENDGRID_API_KEY` is set.
-- `SENDGRID_INBOUND_PUBLIC_KEY` — Same key for Inbound Parse signature (can be the same as event key). Only needed if `SENDGRID_INBOUND_VERIFY=true`.
-- `ANTHROPIC_API_KEY` — Anthropic Claude API key for funnel HTML
-  generation. Required for real generation; if absent, funnel generator
-  falls back to static template rendering. This is the only feature on
-  the platform that uses Claude — all other AI features use Gemini.
-- `FUNNEL_FALLBACK_ONLY` — Optional. Set to `true` to force the funnel
-  generator to skip Claude and always use static templates. Useful for
-  local dev when you don't want to burn API tokens.
-
-**Frontend**
-- `src/services/api.js` — centralized fetch wrapper with JWT auth headers + `X-Tenant-ID` header (reads from `localStorage.kimuntu_tenant_id`)
-- `src/contexts/TenantContext.js` — `currentTenant` state, `setCurrentTenant`, `clearTenant`; persisted to localStorage; listens for `kimuntu-tenant-updated` custom DOM event to re-hydrate when UserContext bootstraps tenant during boot
-- `src/contexts/UserContext.js` — async boot: if `kimuntu_token` exists but `kimuntu_tenant_id` is absent, calls `GET /auth/me/tenant` and writes tenant to localStorage before setting `isLoading = false` (fixes pre-Phase-1 users seeing "No tenant selected")
-- `src/layouts/CRMLayout.js` — loading gate: returns spinner while `isLoading` is true, preventing CRM API calls before tenant is resolved
-- 8 custom hooks in `src/hooks/`: `useApi`, `useDashboard`, `useLeads`, `useLead`, `useCampaigns`, `useOffers`, `useCommunications`, `useIntegrations`
-- `useIntegrations` now exposes `isSendGridConnected`, `sendgridIntegration`, `connectSendGrid`, `disconnectSendGrid`, `sendSendGridTestEmail`
-- `useCommunications` now exposes `sendEmail(leadId, {subject, body})` — POSTs to the new lead-scoped send endpoint
-- CRM nested routing under `/crm` with collapsible sidebar (`src/layouts/CRMLayout.js`); global Header/Footer suppressed inside CRM
-- Tenant name shown in CRM TopBar
-- 8 CRM pages all wired to real backend data:
-  - `/crm/dashboard` — KPIs, AI insights, pipeline summary, source breakdown, recent leads
-  - `/crm/leads` — paginated table, search/filter/sort, slide-in detail drawer with AI assist + Comms tab + Send button (disabled until sender configured)
-  - `/crm/pipeline` — HTML5 drag-and-drop kanban, stage changes persisted via API
-  - `/crm/campaigns` — metrics table with computed KPIs
-  - `/crm/offers` — affiliate offer discovery with niche/network filters
-  - `/crm/communication` — split-pane inbox, AI reply via Gemini
-  - `/crm/analytics` — score distribution, pipeline bars, ROI table
-  - `/crm/settings` — integrations grid + Email Sender card (sender config, test-send button), AI config toggles, team list
-
-**Phase 3 — SendGrid integration ✅ COMPLETE**
-
-- **Known bug — lead drawer send returns 502** (deferred from Phase 3 verification): Sending email via the test-send button in Settings works correctly. Sending from the lead drawer's AI Assist tab → "Send Outreach" returns 502 Bad Gateway in 1–2 seconds with no Python traceback in the backend log. The 200 OK on `/ai/outreach` immediately before confirms the Gemini draft generation succeeded. Diagnosis paused; suspected to be an unhandled exception in the `send_outreach_email` post-send code path (Communication row write, reply-to HMAC token computation, or Activity log) that is not surfacing as a normal traceback. To resume diagnosis: check browser DevTools Network tab → Response body for the failing request, and inspect `app/services/communication_service.py::send_outreach_email`, `app/integrations/sendgrid_client.py`, and the router handler in `app/routers/crm.py`. Must be fixed before Phase 5 demo.
-
-What's live:
-- Outbound email send from the lead drawer AI Assist tab (`POST /api/v1/crm/leads/{id}/communications/send-email`). Reply-to address encodes tenant/lead/comm IDs as an HMAC token.
-- SendGrid Event Webhook receiver (`POST /api/v1/webhooks/sendgrid/events`) — maps delivered/open/click/bounce events to Activity rows and upgrades Communication.status via a one-way precedence ladder (never downgrades).
-- SendGrid Inbound Parse receiver (`POST /api/v1/webhooks/sendgrid/inbound`) — parses multipart from cached raw bytes (stream consumed before signature check), routes via token path first, fallback by from_email match. Cross-tenant ambiguity is explicitly rejected.
-- Email sender config in Settings (`POST /api/v1/crm/integrations/sendgrid/connect`) — stores sender_email + sender_name in Integration.config (no secrets). "Send test email" button hits real SendGrid.
-- Status pills on Communication tab in lead drawer: queued (gray) → sent (light blue) → delivered (blue) → opened (amber) → clicked (green) → bounced/failed (red).
-
-**Phase 3 known limitations (to address in Phase 5):**
-- `reply.kimux.io` MX record is not configured. Inbound email replies only work via direct `POST /api/v1/webhooks/sendgrid/inbound` calls (e.g., from SendGrid's Inbound Parse webhook). Until Phase 5 (DNS + deployment), real reply routing from email clients is not active.
-- Single platform-owned SendGrid account for all tenants. Sender identity is stored per-tenant in Integration.config, but the API key is shared. Phase 5 will add per-tenant SendGrid subuser provisioning and sender verification (domain auth via DNS).
-
-**What is NOT yet built**
-- Background jobs / task queue (Celery, ARQ, etc.)
-- Webhook receivers for ad platforms
-- Real integration SDK wiring for non-ClickBank platforms (connections are mock status toggles)
-- Multi-step campaign creation modal
-- SQLAlchemy do_orm_execute guard (service-layer filtering is enforced; DB-level guard is a future hardening step)
-- Tenant switcher UI (single tenant per user for now)
-
-
-- Background jobs / task queue (Celery, ARQ, etc.) — funnel generation
-  uses FastAPI BackgroundTasks for now; revisit if generation queues up
-- Webhook receivers for ad platforms
-- Real integration SDK wiring for non-ClickBank platforms (connections are
-  mock status toggles)
-- Multi-step campaign creation modal
-- SQLAlchemy do_orm_execute guard (service-layer filtering is enforced;
-  DB-level guard is a future hardening step)
-- Tenant switcher UI (single tenant per user for now)
-- Logo upload / file storage (deferred to Phase 5 with AWS S3)
-- Public funnel hosting (deferred to Phase 5)
+This project is complete and deployed to production as of May 2026. The platform is live at [https://www.kimux.co](https://www.kimux.co) (frontend) and [https://api.kimux.co](https://api.kimux.co) (backend). It has been handed off to the sponsor (Yannick, contact@kimux.co).
 
 ---
 
----
+## Architecture
 
-## Roadmap to Production (Path A — started April 2026)
-
-The CRM is functionally complete as a standalone tool but has integration
-placeholders that need to be made real before public launch. These five phases
-take it from "working shell" to "deployable SaaS."
-
-### Phase 1 — Multi-tenancy enforcement ✅ COMPLETE
-Tenant + TenantMembership tables. All CRM queries scoped by tenant_id.
-X-Tenant-ID header on frontend requests. Async boot sequence resolves
-tenant before CRM renders. Seed script grants all existing users demo
-tenant membership (DEV ONLY). 7 tenant isolation tests pass.
-
-### Phase 2 — ClickBank integration ✅ COMPLETE (superseded by Phase 2.5 pivot)
-Original dual-credential implementation complete. Retained for account-level
-sync; marketplace-sync portion deprecated in Phase 2.5.
-
-### Phase 2.5 — Offer catalog pivot ✅ COMPLETE
-Strategy pivot after discovering ClickBank REST API does not expose marketplace
-discovery (only account-scoped data via `site=` parameter). Scraping rejected
-as core data source (fragile, ToS-risky). New approach: curated catalog + AI
-intelligence layer + user-added offers + crowdsourcing foundation.
-
-**What changes from Phase 2:**
-- Platform ClickBank credentials + marketplace auto-sync → DEPRECATED. Remove
-  CLICKBANK_DEVELOPER_KEY env var. Remove `sync_marketplace_offers` and cold-
-  start logic from offer_service. Remove platform marketplace endpoints. Keep
-  ClickBankClient class but only for tenant account sync.
-- `source="clickbank_marketplace"` → rename to `source="curated"`. Data is now
-  human-curated, not API-synced. Can come from any network, not just ClickBank.
-- `source="clickbank_account"` → unchanged. Still Fernet-encrypted tenant creds.
-- New source value: `source="user_added"` — user-entered offers they're tracking.
-
-**What's new in Phase 2.5:**
-- Curated catalog seeded with ~50 real offers across ClickBank, BuyGoods,
-  MaxWeb, Digistore24 (hybrid: Claude Code generates starter set, human verifies)
-- Admin CRUD interface at `/admin/offers` for catalog management without
-  redeploys. Protected by a new `is_platform_admin` boolean on User.
-- User-added offers: "+ Add Offer" button and form on Offers page. Private to
-  the tenant. Foundation for future crowdsourcing features.
-- AI intelligence layer: each curated offer tagged by Gemini with traffic fit
-  (TikTok-friendly, Email-friendly, Paid Ads, Organic SEO) and audience
-  (Beginner-friendly, High-ticket, Recurring, Low-competition). Tags stored
-  as JSON array on Offer.ai_tags. New offer_service function
-  `regenerate_ai_tags_for_offer(offer)`.
-- Offers page: three sections — "My ClickBank Account" (synced), "Curated
-  Trending" (platform curated), "My Tracked Offers" (user-added). Tag chips on
-  every offer card. New filter: "Show by tag" multi-select.
-- Dashboard: replace empty AI Insights panel (or enhance current empty state)
-  with "Top 5 offers for your strategy" — simple rule for MVP: match offers
-  to tenant's Strategy Engine niche + top channel tags.
-
-**What Phase 2.5 is NOT:**
-- No scraping (rejected as core data source)
-- No XML feed ingestion (can come later, not MVP)
-- No "Trending among users" surface (needs user volume first; capture data now,
-  surface later)
-- No multi-network OAuth (only ClickBank has usable API anyway)
-
-**Tenant isolation exceptions (updated list):**
-1. `offer_service._list_offers_for_tenant`: includes `SYSTEM_TENANT_ID` offers
-   with `source="curated"` alongside tenant's own offers. Rationale: curated
-   catalog is public reference data, not another tenant's private data.
-
-Phase 3 adds no new exceptions. The inbound fallback routing in
-`communication_service.ingest_inbound_parse` explicitly returns unroutable
-(tenant_id=null, no Communication created) when a sender's from_email matches
-outbound comms across more than one tenant — it never picks one arbitrarily.
-
-
-### Phase 3 — SendGrid integration ✅ COMPLETE
-Outbound email send from lead drawer AI Assist tab. Reply-to address tokens
-(HMAC-SHA256) encode tenant/lead/comm IDs for inbound routing. Event webhook
-maps delivered/open/click/bounce to Activity rows + Communication status via
-one-way precedence ladder. Inbound Parse routes by token first, fallback by
-from_email (cross-tenant ambiguity explicitly rejected). Email sender config
-card in Settings with real test-send. 123 tests pass.
-
-**Limitations deferred to Phase 5:** `reply.kimux.io` MX record not yet
-configured (inbound only works via direct webhook POST); single platform
-SendGrid account (per-tenant subuser provisioning + sender verification in
-Phase 5).
-
-### Funnel Builder (sponsor priority — inserted ahead of Phase 4) 🔄 FB3 COMPLETE
-
-AI-generated landing-page funnels that capture leads into the existing CRM
-pipeline. Replaces the "Funnel Builder — SOON" disabled nav item in the CRM
-sidebar with a working module at `/crm/funnels`. Sponsor priority because
-they will use the generated funnels for testing.
-
-**Origin:** Code reference from another team under the same sponsor at
-https://github.com/mkhamisani4/kimuntuProAI. Their stack (Next.js +
-TypeScript + Firestore + Firebase Storage + Tailwind + Claude) does not
-port directly to KimuX (React 19 + JS + Postgres + styled-components +
-Gemini). Port strategy: keep their 6-step wizard structure, field names,
-and generation prompt. Rebuild persistence, routing, and storage in
-KimuX-native patterns.
-
-**AI provider exception:** This is the *only* feature on the platform that
-uses Claude (Anthropic API) instead of Gemini. Justified because (a) the
-sponsor handed us their generator using Claude Sonnet 4.5 with a 64K
-output budget, and (b) Gemini does not have an equivalent for single-shot
-HTML generation of this size — Flash output ceiling is too low, Pro is
-slower and pricier than Claude for this workload. All other AI features
-(lead scoring, outreach, AI assist, communication reply suggestions) stay
-on Gemini. Do NOT migrate other features to Claude — Gemini-only is
-preserved everywhere except funnel HTML generation.
-
-**Sub-phases:**
-- **FB1** ✅ COMPLETE — Backend skeleton + mock generation. Funnel
-  model, FunnelStatus enum (lowercase string values: draft, generating,
-  ready, failed), Alembic migration `dec3d7fc3f77`, Pydantic v2
-  schemas, tenant-scoped service layer, mock generator (2-second sleep
-  + minimal HTML), 7 endpoints under `/api/v1/crm/funnels`. 12 tests
-  passing (10 spec + 2 added: empty key_services validation,
-  unauthenticated access). Total backend suite: 139/139.
-
-- **FB2** ✅ COMPLETE — Frontend wizard with mock backend. `useFunnels`
-  hook with polling support, list page (`/crm/funnels`), 6-step wizard
-  (`/crm/funnels/new`), preview page (`/crm/funnels/:id`) with iframe
-  sandbox, status polling that stops on ready/failed, sidebar nav item
-  activated (line 589 of `src/layouts/CRMLayout.js` — disabled flag
-  removed, `to: '/crm/funnels'` added). Inline rename, download HTML,
-  regenerate, delete all working. Verified end-to-end: complete wizard
-  → mock HTML renders → metadata panel shows mock-fb1 / 2s / tokens=0.
-
-  Two bugs fixed during FB2 verification:
-  - `contact_email` was using Pydantic `EmailStr` which rejected
-    RFC-reserved domains (.test, .example, .invalid). Relaxed to a
-    permissive regex pattern because contact_email is a display-only
-    field (rendered as a mailto link on the generated funnel page —
-    KimuX never sends to it). 2 new tests cover the relaxed
-    validation. Total backend suite: 141/141.
-  - Wizard error handler rendered Pydantic 422 error arrays as
-    `[object Object]`. Added shared helper at `src/utils/apiError.js`
-    with a `formatApiError()` function that handles string details,
-    Pydantic detail arrays, and network errors. Will be reused by
-    FB3/FB4/FB5 error paths.
-
-  Known V2-deferred behavior: the CTA button in mock HTML is inert
-  (no href, no form). Real CTA wiring happens in FB5 when public form
-  submissions are added.
-
-- **FB3** ✅ COMPLETE — Real Claude generation + rule-based fallback.
-  Anthropic SDK 0.97.0, Claude Sonnet 4.5 with streaming, max_tokens=16000.
-  Static template fallback (minimal/modern/bold) renders when API key is
-  missing, fallback flag is set, or specific operational errors occur
-  (rate limit, timeout, server error, insufficient credits). 5 typed
-  exception classes route correctly between fallback and hard-fail paths.
-  
-  Verified end-to-end:
-  - Fallback path: tested with $0 credits during initial build, yellow
-    badge + template renders correctly.
-  - Anthropic success path: tested after sponsor topped up credits.
-    Generation produces ~16K output tokens in ~180s. Output is
-    substantively different from fallback templates (Claude makes
-    bespoke design choices). Green ANTHROPIC badge, real token counts,
-    model claude-sonnet-4-5.
-  
-  Demo data hygiene note: do NOT use real brand names (Gymshark, Nike,
-  etc.) as company_name in funnels shown to sponsors or anyone external —
-  Claude generates legitimately professional output that uses the brand
-  name as a real wordmark. For testing only. Fictional names for demos.
-  
-  Open observations to monitor:
-  - First generation took 180s, longer than expected 15-45s. May be
-    cold start; rerun and confirm subsequent generations are faster.
-  - Output tokens hit 15,991 of 16,000 max — Claude likely stopped on
-    budget, not on completion. Watch for truncated HTML in FB5
-    verification (form may be missing if cutoff happens before contact
-    section). If this becomes a pattern, increase max_tokens or split
-    generation into sections.
-    
-- - **FB5** ✅ COMPLETE — Public form submissions wire to CRM leads.
-  Verified end-to-end with the "Rush Landing Page" funnel: real Claude
-  generation (claude-sonnet-4-5, 1,483/13,128 tokens, 155s), form
-  submitted from inside the in-app iframe with name="John Doe",
-  email="john@example.com", message="This test is successful". Browser
-  navigated to the thank-you page, lead created in /crm/leads with
-  source="funnel" (purple pill), source_detail="Rush Landing Page",
-  notes containing the message. The funnel builder is now a complete
-  CRM primitive — generated landing pages capture leads into the
-  existing pipeline.
-
-  **Two non-obvious configuration items discovered during verification
-  (must persist into production):**
-
-  1. **Iframe sandbox must include `allow-forms`.** The iframe in
-     `src/pages/crm/CRMFunnelDetail.js` is now set to
-     `sandbox="allow-same-origin allow-forms"`. Without `allow-forms`,
-     the browser silently blocks form submissions inside the iframe —
-     the click does nothing, no console error, no network request, no
-     backend log entry. Diagnosing this is hard because there's no
-     visible failure signal.
-
-  2. **`FUNNEL_PUBLIC_BASE_URL` must be set, even in dev.** The form's
-     `action` URL is built from this env var. Empty value produces a
-     relative URL that resolves against the React dev server
-     (localhost:3000), which has no proxy and returns "Cannot POST."
-     Local dev value: `http://localhost:8000`. Production value:
-     whatever the deployed backend URL is (e.g., `https://api.kimux.co`).
-     **DEPLOY CHECKLIST:** set this env var BEFORE generating any
-     production funnels. Funnels generated with the wrong base URL
-     will have a broken form action baked into their HTML until
-     regenerated. Pre-existing dev funnels generated before this env
-     var was set will also need regeneration.
-
-  **Test coverage gap:** Unit tests can't catch the iframe sandbox
-  bug or the base URL bug — both are integration-level issues that
-  only manifest in a real browser. The 9 new tests in
-  `test_public_funnels.py` validate the backend route, lead creation,
-  multi-tenancy, and HTML response, but cannot validate "does the
-  form actually submit when a human clicks the button inside the
-  iframe." Funnel form submission is now part of the manual smoke
-  test required for any production deploy.
-
-  **Phase 6+ hardening items deferred:**
-  - Rate limiting on the public submit endpoint
-  - Honeypot or CAPTCHA bot defense
-  - Post-process Claude output to strip `<form>` tags whose `action`
-    doesn't start with `/api/v1/public/funnels/` (defense against
-    Claude generating forms pointing elsewhere)
-- **FB4** — Edit-via-chat (chat UI on edit page, edit endpoint, edit
-  prompt that preserves structure, conversation history in
-  `Funnel.edit_history` JSON column).
-- **FB6** — Polish (download HTML, regenerate button, inline rename,
-  status pill consistency) + tests + final CLAUDE.md update.
-
-**V1 scope (what ships):** Single-page AI-generated funnels with a
-working lead-capture form. Multi-page funnels, A/B variants, and
-custom domains are deferred.
-
-**Deferred from V1 (to Phase 5+ when AWS is unblocked):**
-- Logo upload (S3 + signed URLs in wizard Step 1; field is hidden in V1)
-- Public hosting at `funnels.kimux.io/{funnel_id}` (CloudFront + S3
-  static hosting). V1 generated HTML is download-only or rendered in
-  the in-app preview iframe.
-- Custom domains per funnel
-- AI image generation for hero sections (currently text + color only)
-- Multi-page funnels with conditional routing
-
-### Connections migration ✅ COMPLETE (CN1 + CN2)
-
-Reorganized integration UI to live at `/crm/connections` instead of buried in
-Settings. Settings is now slimmed to AI Configuration and Team & Permissions
-only — actual user account settings.
-
-Sub-phases shipped:
-- **CN1** — Built `CRMConnections` page at `/crm/connections`, sidebar nav
-  item added (COMMERCE group, above Funnel Builder), dual-mounted
-  ClickBankSection and SendGrid Email Sender card from Settings. Settings
-  unchanged in CN1.
-- **CN2** — Moved IntegrationsGrid (12+ integrations: BuyGoods, ClickBank,
-  Digistore24, Facebook Ads, Google Ads, Instagram, Klaviyo, MaxWeb, PayPal,
-  Shopify, Stripe, TikTok Ads) to Connections in commit 1; deleted
-  ClickBankSection, Email Sender card, and IntegrationsGrid from Settings in
-  commit 2. Updated Settings header to "Account Settings" with link back to
-  Connections. CRMSettings.js dropped from ~441 lines to ~170 lines.
-
-Layout decision: integrations are listed flat on Connections under one
-"All integrations" header. Categorization by platform type is a future
-polish pass.
-
-Deferred to a later sub-phase (CN3 or unplanned, not currently blocking):
-- Build `/admin` route for platform-admin config (Anthropic key status, Gemini
-  key status, Stripe platform account, S3 once it exists). The AI
-  Configuration card on Settings is the closest thing today — works fine for
-  now, will move to `/admin` when that page exists.
-- Standardize integration card UX (consistent header layout, pill placement,
-  button arrangement). Currently each card is its own shape; a polish pass
-  could normalize them.
-
-### Phase 4 — Google OAuth (login only) ⬜ NOT STARTED
-"Sign in with Google" on login page. Establishes the OAuth pattern that
-Meta/Google Ads/TikTok Ads will reuse. oauth_accounts table.
-
-### Phase 5 — AWS deployment + monitoring + honest UI ⬜ NOT STARTED
-RDS Postgres, ECS Fargate, S3+CloudFront, Route 53, ACM SSL, Sentry on
-frontend and backend. Integration settings gets honest status labels
-(available | coming_soon | in_review | connected) so unconnected
-integrations do not lie to users.
-
-### Explicitly deferred until after launch
-- Meta/Google/TikTok/Instagram Ads OAuth + data sync (scaffolded with
-  "in_review" labels at launch)
-- Other affiliate networks (BuyGoods, MaxWeb, Digistore24)
-- Background job queue (Celery/ARQ)
-- Content Creation Suite, Funnel Builder, KimuX Academy
-- Role-based permissions beyond basic tenant membership
-- Billing and plan enforcement
+- **Frontend:** React 19 / CRA deployed on Vercel
+- **Backend:** FastAPI deployed on AWS ECS Fargate (cluster: `kimux-cluster`, service: `kimux-backend`, ECR repo: `kimux-backend`, account `281505305629`)
+- **Database:** PostgreSQL on AWS RDS (`kimux-db.cyxecuk22kgr.us-east-1.rds.amazonaws.com`, db: `kimux`, user: `kimux_admin`)
+- **ALB:** `kimux-alb` with HTTPS via ACM. Domains: `kimux.co`, `www.kimux.co`, `api.kimux.co`
+- **Secrets:** 8 secrets in AWS Secrets Manager under the `kimux/` prefix
+- **Current Alembic migration head:** `43c8f9078d11` (12 migrations total)
 
 ---
 
-## Project Identity
+## Tech Stack Constraints
 
-**KimuX** is an AI-powered digital brokerage, fintech, and marketing platform. The CRM is one core module inside a larger modular, API-first, multi-tenant SaaS product. The broader platform vision includes affiliate/reseller tools, funnel/page builder, campaign analytics, blockchain-backed transparency, fintech/payment features, eCommerce, and a developer ecosystem. **The immediate goal is building the CRM module properly inside the existing web app.**
+Do not change these without a deliberate architectural decision.
 
-## What the CRM Does
+- **Frontend language:** JavaScript only (`.js` files) — no TypeScript, no `.tsx`
+- **Styling:** styled-components only — no Tailwind, no CSS modules
+- **State management:** React context + hooks only — no Redux, no Zustand, no TanStack Query
+- **Backend:** FastAPI + SQLAlchemy 2.0 + Alembic + Pydantic v2
+- **AI split:** Gemini 2.5 Flash for **all** AI features **except** funnel HTML generation, which uses Claude Sonnet 4.5 (Anthropic). Do not migrate funnel generation to Gemini. Do not add Claude to any other feature.
 
-- Tracks leads, clients, and affiliates across the full affiliate marketing lifecycle
-- Integrates with affiliate networks (ClickBank, BuyGoods, MaxWeb, Digistore24) for product/offer discovery
-- Manages ad campaigns across Facebook, Google, TikTok, Instagram, YouTube
-- Scores and segments leads using AI (hot/warm/cold classification)
-- Automates follow-ups and onboarding sequences
-- Generates personalized outreach using AI
-- Supports predictive analytics (CLV, churn risk, ROI suggestions)
-- Tracks communication history across email, SMS, WhatsApp, chatbot
-- Connects campaign data to lead intelligence and conversion tracking
-- Provides reporting dashboards with real-time analytics
+---
 
-## CRM Workflow (in order)
+## Key Architectural Decisions
 
-1. User connects affiliate networks and ad platforms (Settings/Integrations)
-2. User discovers trending offers to promote (Offers page — niche + network selection)
-3. User creates campaigns linked to offers, targeting specific platforms (Campaigns)
-4. Leads are captured from ads, landing pages, affiliate links, website widgets
-5. AI scores and segments leads automatically
-6. AI generates engagement content and outreach drafts
-7. Workflow automation handles follow-ups based on lead behavior
-8. Predictive analytics surface CLV, churn risk, conversion probability
-9. Conversions and transactions are tracked
-10. Post-sale engagement and upsell sequences run
-11. Reporting dashboards summarize everything
+**Multi-tenancy** — Every CRM query is filtered by `tenant_id`. The `X-Tenant-ID` header is required on all frontend CRM API requests. `SYSTEM_TENANT_ID = "00000000-0000-0000-0000-000000000001"` holds curated offers and contact-form leads — it is not a user tenant.
 
-## Tech Stack
+**Fernet encryption** — Tenant ClickBank credentials are stored encrypted via `KIMUX_FERNET_KEY`. The server refuses to start without this key.
 
-### Frontend
-- **Framework:** React 19 (Create React App)
-- **Routing:** react-router-dom 6
-- **Styling:** styled-components (NO Tailwind, NO CSS modules, NO TypeScript)
-- **Charts:** recharts
-- **State:** React context + local state (NO Redux, NO Zustand, NO TanStack Query)
-- **Language:** JavaScript (.js files only, no .ts/.tsx)
+**Reply-to tokens** — HMAC-SHA256 tokens encode `tenant_id:lead_id:comm_id` for inbound email routing. `KIMUX_REPLY_TOKEN_SECRET` is required at startup.
+
+**Funnel HTML is baked at creation time** — `FUNNEL_PUBLIC_BASE_URL` must be set to the backend API URL (e.g. `https://api.kimux.co`) before generating any funnels. Setting the wrong value (e.g. the frontend URL) bakes a broken form `action` into the HTML; fixing it requires regenerating every affected funnel.
+
+**Iframe sandbox** — The funnel preview iframe in `src/pages/crm/CRMFunnelDetail.js` must include `allow-forms` in the `sandbox` attribute. Without it, browsers silently block form submissions inside the iframe with no visible error and no network request.
+
+**Dev proxy** — `src/setupProxy.js` forwards `/api/*` to `127.0.0.1:8000` in local dev. This is intentional — do not change the target.
+
+---
+
+## What Is and Isn't Wired
+
+### Fully wired end-to-end
+
+- **CRM** — Leads, pipeline kanban with drag-and-drop stage persistence, campaigns, communications inbox, analytics dashboards, offer discovery
+- **AI** — Gemini lead scoring (0–100, hot/warm/cold), personalized outreach generation, AI reply suggestions; rule-based fallback when API key is absent
+- **Funnel Builder** — 6-step wizard → Claude Sonnet 4.5 HTML generation (up to 16 K tokens) → public form submission → CRM lead created with `source="funnel"` and `source_detail` set to the funnel name; static template fallback (minimal/modern/bold) on error or missing key
+- **SendGrid** — Outbound email from lead drawer, ECDSA-P256 event webhook (delivered/opened/clicked/bounced → Activity rows + Communication status ladder), inbound parse with HMAC reply-to token routing
+- **ClickBank** — Account-scoped API sync using per-tenant credentials stored with Fernet encryption
+- **Offer catalog** — Platform-curated offers (ClickBank, BuyGoods, MaxWeb, Digistore24) + user-added offers, Gemini-tagged with traffic-fit and audience tags
+- **Multi-tenancy** — Full `tenant_id` scoping on every DB query; async boot sequence resolves tenant before CRM renders
+
+### Scaffolded but not active in production
+
+- Meta/Google/TikTok Ads OAuth — connection cards exist, status is a mock toggle
+- Per-tenant SendGrid subuser provisioning — single platform account shared across tenants
+- Background job queue — funnel generation uses FastAPI `BackgroundTasks`; Celery/ARQ not implemented
+- Public funnel hosting at a custom domain — CloudFront/S3 not configured; funnels are preview-only in-app or downloadable
+- Blockchain integration module — `KimuntuX_BlockchainIntegration/` is a Hardhat/Solidity scaffold, not connected to the app
+- Google OAuth login — cut from v1 scope
+
+---
+
+## Known Open Issues
+
+**Lead drawer outreach email returns 502/403 from SendGrid** — The From address used in the lead drawer send path differs from the one configured in Settings. The Settings test-send path works correctly. To investigate: `backend/app/services/communication_service.py::send_outreach_email` and the relevant handler in `backend/app/routers/crm.py`. Disclosed to sponsor as a known issue before handoff.
+
+**`reply.kimux.io` MX record not configured** — Inbound email routing only works via direct SendGrid webhook POST to `/api/v1/webhooks/sendgrid/inbound`, not from real email clients replying to a received message.
+
+---
+
+## What Was Cut from V1 Scope
+
+- FB4: funnel edit-via-chat UI
+- FB6: funnel polish pass (download, regenerate, inline rename consistency)
+- Phase 4: Google OAuth login
+- Image generation in funnel hero sections
+- Per-tenant SendGrid subuser provisioning and sender domain authentication
+- SQLAlchemy `do_orm_execute` guard — service-layer `tenant_id` filtering is enforced; a DB-level guard is future hardening
+
+---
+
+## Setup: One-Time Scripts (DEV only, run in order)
+
+```bash
+python backend/admin_setup.py      # provisions the sponsor/admin account — run once
+python -m app.scripts.seed         # loads demo leads, campaigns, offers, communications
+                                   # DEV ONLY — grants all users demo tenant access;
+                                   # do not run in production
+```
+
+---
+
+## Required Environment Variables
+
+Full documentation for every variable is in [`backend/.env.example`](backend/.env.example).
 
 ### Backend
-- **Framework:** FastAPI (Python)
-- **ORM:** SQLAlchemy
-- **Migrations:** Alembic
-- **Database:** PostgreSQL (local: `postgresql://kimux:kimux_dev@localhost:5432/kimux_crm`)
-- **Auth:** JWT via python-jose, password hashing via passlib
-- **Validation:** Pydantic v2 schemas
-- **Language:** Python 3.11+
 
-## Current Repo Structure (What Already Exists)
+| Variable | Notes |
+|---|---|
+| `DATABASE_URL` | PostgreSQL connection string |
+| `SECRET_KEY` | JWT signing secret |
+| `KIMUX_FERNET_KEY` | Fernet key for tenant credential encryption. Generate: `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"` |
+| `KIMUX_REPLY_TOKEN_SECRET` | HMAC secret for reply-to address tokens. Generate: `python -c "import secrets; print(secrets.token_hex(32))"` |
+| `SENDGRID_API_KEY` | Optional in dev; required for outbound email |
+| `SENDGRID_EVENT_WEBHOOK_PUBLIC_KEY` | ECDSA-P256 key from SendGrid Mail Settings → Event Webhook. Required if `SENDGRID_API_KEY` is set. |
+| `GOOGLE_API_KEY` | Gemini 2.5 Flash. Rule-based fallback activates if absent. |
+| `ANTHROPIC_API_KEY` | Claude Sonnet 4.5, funnel generation only. Static template fallback activates if absent. |
+| `FUNNEL_PUBLIC_BASE_URL` | **Must be the backend API URL** (e.g. `https://api.kimux.co`), not the frontend. Baked into funnel HTML at generation time. |
+| `FUNNEL_FALLBACK_ONLY` | Set `true` to skip Claude and always use static templates. Useful for local dev. |
 
-### Frontend — what's real vs mock
-- `src/App.js` — app shell with ThemeProvider, UserProvider, BrowserRouter, routes
-- `src/contexts/UserContext.js` — auth state, login/logout, localStorage persistence (REAL, do not break)
-- `src/contexts/ThemeContext.js` — dark/light mode toggle (REAL)
-- `src/components/Header.js` — global nav header (REAL, do not break)
-- `src/components/Footer.js` — global footer (REAL, do not break)
-- `src/components/LandingPage.js` — marketing page with contact form posting to backend (REAL, the form submission is the only real lead capture surface)
-- `src/pages/LoginPage.js` — auth flow calling backend (REAL)
-- `src/pages/SignupPage.js` — auth flow calling backend (REAL)
-- `src/pages/CRMPage.js` — MOCK dashboard at `/crm` route. Replace this with real CRM.
-- `src/pages/CRMMain.js` — UNUSED but better CRM shell with tabs for Leads, Campaigns, Communication, Payouts, Reports, Settings. Wire this to `/crm` route.
-- `src/components/KpiCard.js` — reusable KPI card component (mock data, but good UI)
-- `src/components/LeadsTable.js` — reads from `src/data/leads.json`, opens drawer (mock, but good UI pattern)
-- `src/components/LeadDrawer.js` — lead detail side panel (mock, good pattern)
-- `src/components/PipelineKanban.js` — 5-column kanban (mock, hardcoded, non-interactive)
-- `src/components/CampaignsSnapshot.js` — recharts campaign charts (mock, good pattern)
-- `src/components/CommunicationPlaceholder.js` — split-pane inbox layout (explicit placeholder)
-- `src/components/ReportsGrid.js` — chart cards layout (mock)
-- `src/components/SettingsIntegrations.js` — integration cards with connect buttons (mock)
-- `src/data/leads.json` — sample lead data
-- `src/data/campaigns.json` — sample campaign data
+### Frontend (`.env` at repo root)
 
-### Backend — what's real
-- `backend/app/main.py` — FastAPI app entry, CORS config
-- `backend/app/core/config.py` — Settings with DATABASE_URL (defaults SQLite, override with env)
-- `backend/app/core/database.py` — SQLAlchemy engine, SessionLocal, Base, get_db dependency
-- `backend/app/core/security.py` — JWT creation/verification, password hashing
-- `backend/app/routers/auth.py` — POST /signup, POST /login, POST /token, GET /me (ALL REAL)
-- `backend/app/routers/contacts.py` — POST /contact (REAL, stores ContactSubmission)
-- `backend/app/models/user.py` — User model (id, full_name, email, hashed_password, is_active, timestamps)
-- `backend/app/models/contact_submission.py` — ContactSubmission model
-- `backend/app/schemas/auth.py` — Pydantic schemas for auth
-- `backend/app/schemas/contact.py` — Pydantic schemas for contact form
+| Variable | Dev value | Prod value |
+|---|---|---|
+| `REACT_APP_API_URL` | *(empty)* | `https://api.kimux.co` |
 
-### Backend — CRM (all real, all wired)
-- `backend/app/models/` — Lead, Activity, Communication, Campaign, Offer, Integration (+ User, ContactSubmission)
-- `backend/app/schemas/` — Pydantic v2 schemas for all models (Create, Update, Response, List variants)
-- `backend/app/services/` — lead_service, campaign_service, offer_service, communication_service, integration_service, dashboard_service, ai_service
-- `backend/app/routers/crm.py` — 25+ routes, all authenticated
-- `backend/app/routers/contacts.py` — now auto-creates a CRM lead on every form submission
-- `backend/app/scripts/seed.py` — seeds 48 leads, campaigns, offers, integrations, communications
-- `backend/alembic/` — Alembic migration environment configured
-- `backend/tests/` — conftest.py + test_leads.py, 28 passing tests
-
-### Backend — what is NOT yet built
-- Background jobs / task queue (Celery, ARQ, etc.)
-- Webhook receivers for ad platforms
-- Real integration SDK wiring (connect/disconnect are mock status toggles)
-- Scheduled AI re-scoring jobs
+---
 
 ## Coding Conventions
 
 ### Frontend
-- All components are `.js` files (not TypeScript)
-- Use styled-components for all styling. Create styled components at the top of the file or in a separate `.styles.js` file.
-- Follow existing component patterns: functional components with hooks
-- State management: useState/useEffect/useContext. Create custom hooks in `src/hooks/` for data fetching.
-- Create `src/services/api.js` as a centralized fetch wrapper that handles auth headers and base URL
-- File naming: PascalCase for components (`LeadsTable.js`), camelCase for services/hooks (`useLeads.js`, `api.js`)
-- Keep components focused — one component per file, extract shared components to `src/components/`
+
+- All components are `.js` — not TypeScript
+- styled-components for all styling; create styled components at the top of the file or in a separate `.styles.js` file
+- Functional components with hooks; custom hooks live in `src/hooks/`
+- State: `useState` / `useEffect` / `useContext` only
+- File naming: PascalCase for components (`LeadsTable.js`), camelCase for hooks/services (`useLeads.js`, `api.js`)
+- `src/services/api.js` is the centralized fetch wrapper — use it for all API calls; do not bypass it with raw `fetch`
 
 ### Backend
-- Follow the existing pattern in `auth.py` and `contacts.py` for new routers
-- Models go in `backend/app/models/` — one file per model, import all models in `backend/app/models/__init__.py`
-- Schemas go in `backend/app/schemas/` — Pydantic v2 models for request/response validation
-- **Create a service layer:** `backend/app/services/` — one service file per domain (lead_service.py, campaign_service.py, ai_service.py). Routers call services, services call the database. Business logic lives in services, not routers.
+
+Work order for new features: **model → migration → schema → service → router**
+
+- Models go in `backend/app/models/` — import all models in `models/__init__.py`
+- Schemas go in `backend/app/schemas/` — Pydantic v2; separate `Create`, `Update`, and `Response` variants
+- Business logic goes in `backend/app/services/` — routers call services, services call the database; no business logic in routers
 - Use SQLAlchemy 2.0 style queries
-- Use Alembic for all schema changes — never use `create_all` in production
-- All endpoints return consistent response format: `{"data": ..., "message": "..."}` for success, `{"detail": "..."}` for errors
-- Use FastAPI's `Depends(get_db)` for database sessions
-- Use `Depends(get_current_user)` from security module for authenticated endpoints
+- Never use `Base.metadata.create_all()` — always use Alembic for schema changes
+- Success response format: `{"data": ..., "message": "..."}` — error format: `{"detail": "..."}`
+- **Every CRM service function must filter by `tenant_id`. No exceptions.**
 
-## Database Schema
+---
 
-### Lead
-```
-id: UUID, primary key
-tenant_id: UUID, nullable (for future multi-tenancy)
-first_name: String, required
-last_name: String, required
-email: String, required, indexed
-phone: String, nullable
-company: String, nullable
-industry: String, nullable
-job_title: String, nullable
-source: Enum(facebook_ads, google_ads, tiktok_ads, instagram, landing_page, affiliate_link, website_widget, api)
-source_detail: String, nullable (specific campaign name or affiliate ID)
-stage: Enum(new, contacted, qualified, proposal, negotiation, won, lost), default=new
-classification: Enum(hot, warm, cold), default=cold
-ai_score: Integer (0-100), default=0
-predicted_value: Float, default=0
-ltv: Float, default=0
-tags: JSON (array of strings)
-notes: Text, nullable
-assigned_to: UUID, FK to User, nullable
-campaign_id: UUID, FK to Campaign, nullable
-affiliate_id: String, nullable
-custom_fields: JSON
-created_at: DateTime, auto
-updated_at: DateTime, auto
-last_contact_at: DateTime, nullable
-converted_at: DateTime, nullable
+## Running Tests
+
+```bash
+cd backend
+python -m pytest tests/ -v
 ```
 
-### Activity
-```
-id: UUID, primary key
-lead_id: UUID, FK to Lead, required, indexed
-type: Enum(email_sent, email_opened, email_clicked, call, meeting, form_submit, page_visit, ad_click, chatbot, note_added, stage_changed, score_updated)
-description: String, required
-metadata: JSON, nullable
-channel: String, nullable
-performed_by: UUID, FK to User, nullable
-timestamp: DateTime, auto
-```
+16 test files covering leads, multi-tenancy, ClickBank, offer catalog, SendGrid signature verification, communication service, webhook endpoints, reply tokens, Anthropic client, funnel generation, funnel templates, and public funnel form submission.
 
-### Communication
-```
-id: UUID, primary key
-tenant_id: UUID, FK to Tenant, nullable, indexed
-lead_id: UUID, FK to Lead, required, indexed
-channel: Enum(email, sms, whatsapp, chatbot, social_dm)
-direction: Enum(inbound, outbound)
-subject: String, nullable
-body: Text, required
-preview: String (first ~100 chars of body)
-read: Boolean, default=false
-provider_message_id: String, nullable, indexed  -- X-Message-ID from SendGrid
-status: String, nullable  -- queued|sent|delivered|opened|clicked|bounced|failed (outbound only)
-from_email: String, nullable
-to_email: String, nullable
-in_reply_to_message_id: String, nullable  -- for email threading
-metadata: JSON, nullable
-timestamp: DateTime, auto
-```
+The frontend has no test suite beyond the CRA scaffold (`src/App.test.js`).
 
-### Campaign
-```
-id: UUID, primary key
-name: String, required
-platform: String, required
-status: Enum(draft, active, paused, completed), default=draft
-objective: String, nullable
-budget_daily: Float, nullable
-budget_total: Float, nullable
-currency: String, default=USD
-offer_name: String, nullable
-offer_network: String, nullable
-targeting: JSON, nullable
-metrics: JSON (impressions, clicks, leads, conversions, spend, revenue, ctr, cpl, cpa, roas)
-start_date: DateTime, nullable
-end_date: DateTime, nullable
-created_at: DateTime, auto
-updated_at: DateTime, auto
+---
+
+## Deployment: Backend
+
+```bash
+# 1. Build image
+docker build -t kimux-backend ./backend
+
+# 2. Authenticate and push to ECR
+aws ecr get-login-password --region us-east-1 \
+  | docker login --username AWS --password-stdin \
+    281505305629.dkr.ecr.us-east-1.amazonaws.com
+
+docker tag kimux-backend:latest \
+  281505305629.dkr.ecr.us-east-1.amazonaws.com/kimux-backend:latest
+
+docker push \
+  281505305629.dkr.ecr.us-east-1.amazonaws.com/kimux-backend:latest
+
+# 3. Force new ECS deployment
+aws ecs update-service --cluster kimux-cluster \
+  --service kimux-backend --force-new-deployment
+
+# 4. Run migrations (before or as part of the deploy)
+alembic upgrade head
 ```
 
-### Offer
-```
-id: UUID, primary key
-name: String, required
-niche: String, required
-network: String, required
-aov: Float
-gravity: Float, nullable
-trend_direction: Enum(up, down, stable)
-trend_value: Float, nullable
-commission_rate: Float
-conversion_rate: Float, nullable
-status: Enum(active, inactive), default=active
-external_url: String, nullable
-created_at: DateTime, auto
-```
+> `backend/apprunner.yaml` is present in the repo but is no longer used — ECS Fargate replaced App Runner.
 
-### Integration
-```
-id: UUID, primary key
-tenant_id: UUID, nullable
-platform_name: String, required
-platform_type: Enum(ad_platform, affiliate_network, payment_gateway, tool)
-status: Enum(connected, pending, disconnected), default=disconnected
-config: JSON (stores non-sensitive config)
-connected_at: DateTime, nullable
-last_sync_at: DateTime, nullable
-created_at: DateTime, auto
-```
+---
 
-## CRM API Endpoints
+## Deployment: Frontend
 
-All CRM endpoints live under `/api/v1/crm/` and require authentication.
+Vercel auto-deploys on push to the connected branch. Set `REACT_APP_API_URL=https://api.kimux.co` in the Vercel dashboard — do not commit this value to a `.env` file.
 
-```
-# Dashboard
-GET  /api/v1/crm/dashboard/summary
-
-# Leads
-GET    /api/v1/crm/leads                    (query params: page, limit, search, source, stage, classification, sort_by, sort_dir)
-POST   /api/v1/crm/leads
-GET    /api/v1/crm/leads/{id}
-PATCH  /api/v1/crm/leads/{id}
-DELETE /api/v1/crm/leads/{id}
-PATCH  /api/v1/crm/leads/{id}/stage
-GET    /api/v1/crm/leads/{id}/activities
-POST   /api/v1/crm/leads/{id}/activities
-
-# AI
-POST   /api/v1/crm/leads/{id}/ai/score
-POST   /api/v1/crm/leads/{id}/ai/outreach
-
-# Communications
-GET    /api/v1/crm/communications            (query param: lead_id)
-POST   /api/v1/crm/communications
-POST   /api/v1/crm/leads/{id}/communications/send-email   (subject, body → real SendGrid send)
-
-# Campaigns
-GET    /api/v1/crm/campaigns
-POST   /api/v1/crm/campaigns
-GET    /api/v1/crm/campaigns/{id}
-PATCH  /api/v1/crm/campaigns/{id}
-
-# Offers
-GET    /api/v1/crm/offers                    (query params: niche, network, sort_by)
-POST   /api/v1/crm/offers                    (seed/sync offers)
-
-# Integrations
-GET    /api/v1/crm/integrations
-POST   /api/v1/crm/integrations/{platform}/connect      (generic — mock status toggle)
-DELETE /api/v1/crm/integrations/{platform}/disconnect   (generic)
-GET    /api/v1/crm/integrations/sendgrid/status         (returns connected + sender config)
-POST   /api/v1/crm/integrations/sendgrid/connect        (body: sender_email, sender_name)
-DELETE /api/v1/crm/integrations/sendgrid/disconnect
-POST   /api/v1/crm/integrations/sendgrid/test-send      (real send to current_user.email)
-
-# Webhooks (no auth — SendGrid calls these)
-POST   /api/v1/webhooks/sendgrid/events                 (event webhook batch; ECDSA-P256 verified)
-POST   /api/v1/webhooks/sendgrid/inbound                (inbound parse; multipart/form-data)
-
-# Reports
-GET    /api/v1/crm/reports/pipeline-summary
-GET    /api/v1/crm/reports/source-breakdown
-GET    /api/v1/crm/reports/campaign-performance
-```
-
-## CRM Frontend Route Structure
-
-Replace `/crm` route target from `CRMPage.js` to a new CRM layout with nested routes:
-
-```
-/crm                    → redirect to /crm/dashboard
-/crm/dashboard          → Dashboard (KPIs, network sales, AI insights, pipeline summary, recent leads)
-/crm/offers             → Offer Discovery (niche selector, network filter, trending tables, offer results)
-/crm/campaigns          → Campaign Management (KPIs, campaign table, AI optimization, create modal)
-/crm/leads              → Leads Table (search, filter, sort, paginated table)
-/crm/pipeline           → Pipeline Kanban (drag-and-drop stage management)
-/crm/communication      → Messages (split-pane inbox with AI reply suggestions)
-/crm/analytics          → Analytics & Reports (score distribution, pipeline charts, ROI tables)
-/crm/settings           → Settings (integrations grid, AI config toggles, team/permissions)
-```
-
-The CRM should have its own sidebar navigation (not the global Header). The global Header/Footer should still show on marketing pages but the CRM section should feel like a separate app-within-the-app.
-
-## Implementation Order
-
-### Phase 1 — Backend Foundation ✅ COMPLETE
-1. ✅ Set up Alembic in the backend directory
-2. ✅ Create all CRM models (Lead, Activity, Communication, Campaign, Offer, Integration)
-3. ✅ Generate and run initial migration
-4. ✅ Create Pydantic schemas for each model (Create, Update, Response, List)
-5. ✅ Create service layer files (lead_service.py, campaign_service.py, etc.)
-6. ✅ Implement leads CRUD endpoints (router + service + schemas)
-7. ✅ Implement dashboard summary endpoint
-8. ✅ Seed database with realistic demo data (`backend/app/scripts/seed.py`)
-9. ✅ 28 passing integration tests (`backend/tests/`)
-
-### Phase 2 — Frontend Data Layer ✅ COMPLETE
-1. ✅ `src/services/api.js` — centralized fetch wrapper with JWT auth headers
-2. ✅ 8 custom hooks in `src/hooks/`
-3. ✅ CRM nested routing in App.js with CRMLayout component
-4. ✅ Collapsible CRM sidebar navigation
-
-### Phase 3 — Frontend CRM Pages ✅ COMPLETE
-1. ✅ Dashboard (`/crm/dashboard`) — KPIs, AI insights, pipeline, source breakdown
-2. ✅ Leads (`/crm/leads`) — paginated table, drawer, AI assist tab
-3. ✅ Pipeline (`/crm/pipeline`) — drag-and-drop kanban, persists via PATCH /stage
-4. ✅ Campaigns (`/crm/campaigns`) — metrics table, computed KPIs
-5. ✅ Offers (`/crm/offers`) — niche/network filter, trending tables
-6. ✅ Communication (`/crm/communication`) — split-pane inbox, AI reply
-7. ✅ Analytics (`/crm/analytics`) — score distribution, pipeline bars, ROI table
-8. ✅ Settings (`/crm/settings`) — integrations grid, AI toggles, team list
-
-### Phase 4 — AI Features ✅ COMPLETE
-1. ✅ `backend/app/services/ai_service.py` — dual-mode (Gemini + rule-based fallback)
-2. ✅ Lead scoring via Gemini 2.5 Flash; returns score, classification, conversion_probability, recommended_action, reasoning
-3. ✅ Outreach generation via Gemini; returns subject, body, estimated_open_rate, estimated_reply_rate
-4. ✅ `POST /api/v1/crm/leads/ai/score-all?force=true` for bulk re-scoring
-
-### Phase 5 — Campaign Creation Flow ⬜ NOT STARTED
-1. Multi-step campaign creation modal (Details → Budget → Review → Launch)
-2. Link campaigns to offers
-3. AI compliance check
-4. Campaign metrics tracking
-
-### Phase 6 — Integrations Framework ⬜ NOT STARTED
-1. Real OAuth flows for ad platforms (Facebook, Google, TikTok)
-2. Real affiliate network API polling (ClickBank, MaxWeb, etc.)
-3. Webhook receivers for conversion tracking
-4. Background job queue for scheduled sync
-
-## Things NOT to Do
-
-- Do NOT use TypeScript — the project is JavaScript
-- Do NOT install Tailwind or any other CSS framework — use styled-components
-- Do NOT add Redux, Zustand, or any state management library — use React context + hooks
-- Do NOT break the existing auth flow in UserContext.js
-- Do NOT break the existing Header.js / Footer.js global navigation
-- Do NOT break the existing landing page contact form submission
-- Do NOT trust marketing pages, FAQ content, or developer page as backend truth — they are all mock/aspirational
-- Do NOT use `Base.metadata.create_all()` for schema changes — use Alembic migrations
-- Do NOT store API keys or secrets in code — use environment variables
-- Do NOT build disconnected demo pages — every CRM page should talk to the real backend
+---
 
 ## Files to Read Before Making Changes
 
-Before touching anything, read these files to understand the existing patterns:
-
-**Must read:**
-- src/App.js (routing, providers, app shell)
-- src/contexts/UserContext.js (auth state pattern)
-- src/components/Header.js (global nav)
-- backend/app/main.py (FastAPI setup)
-- backend/app/routers/auth.py (endpoint pattern to follow)
-- backend/app/models/user.py (model pattern to follow)
-- backend/app/core/database.py (db session pattern)
-- backend/app/core/security.py (auth dependency pattern)
-
-**Read for CRM context:**
-- src/layouts/CRMLayout.js (sidebar + outlet shell for all CRM pages)
-- src/pages/crm/CRMDashboard.js (reference implementation — patterns used across all pages)
-- src/pages/crm/CRMLeads.js (most complex page — drawer, tabs, AI assist, debounced search)
-- src/hooks/useLeads.js (data fetching pattern to follow for new hooks)
-- backend/app/services/lead_service.py (service layer pattern to follow)
-- backend/app/routers/crm.py (all CRM routes — check before adding new endpoints)
-- backend/tests/conftest.py (test setup — session-scoped fixtures, in-memory SQLite)
+| File | Why |
+|---|---|
+| `src/App.js` | Routing, providers, app shell |
+| `src/contexts/UserContext.js` | Auth state — do not break |
+| `src/layouts/CRMLayout.js` | CRM sidebar + outlet shell for all CRM pages |
+| `src/pages/crm/CRMDashboard.js` | Reference implementation for CRM page patterns |
+| `src/hooks/useLeads.js` | Data fetching pattern to follow for new hooks |
+| `backend/app/main.py` | FastAPI setup, CORS config, router registration |
+| `backend/app/routers/crm.py` | All CRM routes — check here before adding new endpoints |
+| `backend/app/services/lead_service.py` | Service layer pattern to follow |
+| `backend/tests/conftest.py` | Test setup, session-scoped fixtures, in-memory SQLite |
