@@ -23,6 +23,18 @@ const Shell = styled.div`
   font-family: ${C.fontFamily};
 `;
 
+const SidebarBackdrop = styled.div`
+  display: none;
+
+  @media (max-width: 1024px) {
+    display: ${({ $open }) => ($open ? 'block' : 'none')};
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    z-index: 15;
+  }
+`;
+
 // ── Sidebar ───────────────────────────────────────────────────────────────────
 const Sidebar = styled.aside`
   width: ${({ $collapsed }) => ($collapsed ? '64px' : '228px')};
@@ -31,9 +43,22 @@ const Sidebar = styled.aside`
   border-right: 1px solid ${C.border};
   display: flex;
   flex-direction: column;
-  transition: width 0.2s ease, min-width 0.2s ease;
+  transition: width 0.2s ease, min-width 0.2s ease, transform 0.25s ease;
   overflow: hidden;
   z-index: 10;
+
+  @media (max-width: 1024px) {
+    position: fixed;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    height: 100vh;
+    width: min(260px, 86vw);
+    min-width: min(260px, 86vw);
+    z-index: 20;
+    transform: translateX(${({ $mobileOpen }) => ($mobileOpen ? '0' : '-100%')});
+    box-shadow: ${({ $mobileOpen }) => ($mobileOpen ? '4px 0 24px rgba(0, 0, 0, 0.45)' : 'none')};
+  }
 `;
 
 const LogoRow = styled.div`
@@ -97,6 +122,10 @@ const CollapseBtn = styled.button`
   align-items: center;
   flex-shrink: 0;
   &:hover { color: ${C.text}; background: ${C.card}; }
+
+  @media (max-width: 1024px) {
+    display: none;
+  }
 `;
 
 const Nav = styled.nav`
@@ -234,6 +263,11 @@ const NavLabel = styled.span`
   width: ${({ $collapsed }) => ($collapsed ? 0 : 'auto')};
   overflow: hidden;
   transition: opacity 0.15s ease;
+
+  @media (max-width: 1024px) {
+    opacity: 1;
+    width: auto;
+  }
 `;
 
 // ── Badges ────────────────────────────────────────────────────────────────────
@@ -344,6 +378,11 @@ const UserInfo = styled.div`
   opacity: ${({ $collapsed }) => ($collapsed ? 0 : 1)};
   width: ${({ $collapsed }) => ($collapsed ? 0 : 'auto')};
   transition: opacity 0.15s ease;
+
+  @media (max-width: 1024px) {
+    opacity: 1;
+    width: auto;
+  }
 `;
 
 const UserName = styled.div`
@@ -396,6 +435,12 @@ const TopBar = styled.header`
   align-items: center;
   gap: 16px;
   padding: 0 24px;
+  min-width: 0;
+
+  @media (max-width: 768px) {
+    gap: 8px;
+    padding: 0 12px;
+  }
 `;
 
 const PageTitle = styled.h1`
@@ -405,6 +450,14 @@ const PageTitle = styled.h1`
   color: ${C.text};
   margin: 0;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  flex-shrink: 1;
+
+  @media (max-width: 480px) {
+    font-size: 14px;
+  }
 `;
 
 const Spacer = styled.div`flex: 1;`;
@@ -418,6 +471,14 @@ const TenantBadge = styled.div`
   border-radius: 6px;
   padding: 4px 10px;
   white-space: nowrap;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 1;
+
+  @media (max-width: 640px) {
+    display: none;
+  }
 `;
 
 const SearchBox = styled.div`
@@ -429,6 +490,10 @@ const SearchBox = styled.div`
   border-radius: 8px;
   padding: 6px 12px;
   width: 220px;
+
+  @media (max-width: 1024px) {
+    display: none;
+  }
 `;
 
 const SearchInput = styled.input`
@@ -454,6 +519,15 @@ const IconBtn = styled.button`
   &:hover { color: ${C.text}; border-color: ${C.muted}; }
 `;
 
+const MobileMenuBtn = styled(IconBtn)`
+  display: none;
+  flex-shrink: 0;
+
+  @media (max-width: 1024px) {
+    display: flex;
+  }
+`;
+
 const NewLeadBtn = styled.button`
   background: ${C.accent};
   color: #fff;
@@ -467,13 +541,21 @@ const NewLeadBtn = styled.button`
   align-items: center;
   gap: 6px;
   white-space: nowrap;
+  flex-shrink: 0;
   &:hover { background: ${C.accentHover}; }
+
+  @media (max-width: 640px) {
+    padding: 8px 10px;
+    span { display: none; }
+  }
 `;
 
 const Content = styled.main`
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
   background: ${C.bg};
+  min-width: 0;
 `;
 
 // ── SVG Icons ─────────────────────────────────────────────────────────────────
@@ -629,6 +711,11 @@ const icons = {
       <polyline points="6 9 12 15 18 9"/>
     </svg>
   ),
+  menu: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+      <line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/>
+    </svg>
+  ),
   calendar: (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
@@ -719,6 +806,10 @@ const LoadingShell = styled.div`
 export default function CRMLayout() {
   // All hooks must be called unconditionally before any early return
   const [collapsed, setCollapsed] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia('(max-width: 1024px)').matches
+  );
   const [affiliateExpanded, setAffiliateExpanded] = useState(true);
   const [campaignsExpanded, setCampaignsExpanded] = useState(true);
   const [profilePanelOpen, setProfilePanelOpen] = useState(false);
@@ -728,15 +819,36 @@ export default function CRMLayout() {
   const navigate = useNavigate();
   const location = useLocation();
 
-useEffect(() => {
-  const inCampaignSection =
-    location.pathname.startsWith('/crm/campaigns') ||
-    location.pathname === '/crm/content-gen' ||
-    location.pathname === '/crm/content-scheduler';
-  if (!inCampaignSection) {
-    setCampaignsExpanded(false);
-  }
-}, [location.pathname]);
+  useEffect(() => {
+    const inCampaignSection =
+      location.pathname.startsWith('/crm/campaigns') ||
+      location.pathname === '/crm/content-gen' ||
+      location.pathname === '/crm/content-scheduler';
+    if (!inCampaignSection) {
+      setCampaignsExpanded(false);
+    }
+  }, [location.pathname]);
+
+  useEffect(() => {
+    setMobileNavOpen(false);
+  }, [location.pathname]);
+
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 1024px)');
+    const onChange = () => setIsMobile(mq.matches);
+    onChange();
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+
+  useEffect(() => {
+    if (!mobileNavOpen) return undefined;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [mobileNavOpen]);
 
   // Block rendering until auth + tenant bootstrap is complete
   if (isLoading) return <LoadingShell>Loading…</LoadingShell>;
@@ -752,6 +864,7 @@ useEffect(() => {
 
   const isAdminUser = !!(user?.isAdmin ?? user?.is_admin);
   const navSections = getNavSections(isAdminUser);
+  const sidebarCollapsed = isMobile ? false : collapsed;
 
   // Is any Affiliate Center child currently active?
   const affiliateActive = navSections[1].items
@@ -760,11 +873,12 @@ useEffect(() => {
 
   return (
     <Shell>
+      <SidebarBackdrop $open={mobileNavOpen} onClick={() => setMobileNavOpen(false)} aria-hidden="true" />
       {/* ── Sidebar ── */}
-      <Sidebar $collapsed={collapsed}>
-        <LogoRow $collapsed={collapsed}>
-          <LogoMark to="/" title="KimuX home" $collapsed={collapsed}>
-            <LogoImage src={crmSidebarLogo} alt="KimuX" $collapsed={collapsed} />
+      <Sidebar $collapsed={sidebarCollapsed} $mobileOpen={mobileNavOpen}>
+        <LogoRow $collapsed={sidebarCollapsed}>
+          <LogoMark to="/" title="KimuX home" $collapsed={sidebarCollapsed}>
+            <LogoImage src={crmSidebarLogo} alt="KimuX" $collapsed={sidebarCollapsed} />
             <HiddenTextForA11y>KimuX home</HiddenTextForA11y>
           </LogoMark>
           {!collapsed && (
@@ -785,16 +899,16 @@ useEffect(() => {
         <Nav>
           {navSections.map((section) => (
             <React.Fragment key={section.label}>
-              <SectionLabel $collapsed={collapsed}>{section.label}</SectionLabel>
+              <SectionLabel $collapsed={sidebarCollapsed}>{section.label}</SectionLabel>
 
               {section.items.map((item) => {
                 // ── Disabled item ──
                 if (item.disabled) {
                   return (
-                    <DisabledItem key={item.label} $collapsed={collapsed} title={collapsed ? item.label : undefined}>
+                    <DisabledItem key={item.label} $collapsed={sidebarCollapsed} title={collapsed ? item.label : undefined}>
                       <NavIcon>{icons[item.icon]}</NavIcon>
-                      <NavLabel $collapsed={collapsed}>{item.label}</NavLabel>
-                      {!collapsed && <ComingSoonBadge>Soon</ComingSoonBadge>}
+                      <NavLabel $collapsed={sidebarCollapsed}>{item.label}</NavLabel>
+                      {!sidebarCollapsed && <ComingSoonBadge>Soon</ComingSoonBadge>}
                     </DisabledItem>
                   );
                 }
@@ -811,14 +925,14 @@ useEffect(() => {
                       <NavItemRow>
                         <NavItem
                           to={item.to}
-                          $collapsed={collapsed}
+                          $collapsed={sidebarCollapsed}
                           title={collapsed ? item.label : undefined}
                           style={!collapsed ? { paddingRight: '30px' } : undefined}
                         >
                           <NavIcon>{icons[item.icon]}</NavIcon>
-                          <NavLabel $collapsed={collapsed}>{item.label}</NavLabel>
+                          <NavLabel $collapsed={sidebarCollapsed}>{item.label}</NavLabel>
                         </NavItem>
-                        {!collapsed && (
+                        {!sidebarCollapsed && (
                           <ArrowBtn onClick={toggle} title={isExpanded ? 'Collapse' : 'Expand'}>
                             <Chevron $open={isExpanded} $collapsed={false}>
                               {icons.chevronDown}
@@ -827,15 +941,15 @@ useEffect(() => {
                         )}
                       </NavItemRow>
 
-                      {!collapsed && isExpanded && item.children?.map(child => (
+                      {!sidebarCollapsed && isExpanded && item.children?.map(child => (
                         <SubNavItem
                           key={child.to}
                           to={child.to}
-                          $collapsed={collapsed}
+                          $collapsed={sidebarCollapsed}
                           title={child.label}
                         >
                           <NavIcon>{icons[child.icon]}</NavIcon>
-                          <NavLabel $collapsed={collapsed}>{child.label}</NavLabel>
+                          <NavLabel $collapsed={sidebarCollapsed}>{child.label}</NavLabel>
                         </SubNavItem>
                       ))}
                     </React.Fragment>
@@ -847,7 +961,7 @@ useEffect(() => {
                   return (
                     <React.Fragment key={item.label}>
                       <ParentItem
-                        $collapsed={collapsed}
+                        $collapsed={sidebarCollapsed}
                         $active={affiliateActive}
                         title={collapsed ? item.label : undefined}
                         onClick={() => {
@@ -859,21 +973,21 @@ useEffect(() => {
                         }}
                       >
                         <NavIcon>{icons[item.icon]}</NavIcon>
-                        <NavLabel $collapsed={collapsed}>{item.label}</NavLabel>
-                        <Chevron $open={affiliateExpanded} $collapsed={collapsed}>
+                        <NavLabel $collapsed={sidebarCollapsed}>{item.label}</NavLabel>
+                        <Chevron $open={affiliateExpanded} $collapsed={sidebarCollapsed}>
                           {icons.chevronDown}
                         </Chevron>
                       </ParentItem>
 
-                      {!collapsed && affiliateExpanded && item.children?.map(child => (
+                      {!sidebarCollapsed && affiliateExpanded && item.children?.map(child => (
                         <SubNavItem
                           key={child.to}
                           to={child.to}
-                          $collapsed={collapsed}
+                          $collapsed={sidebarCollapsed}
                           title={child.label}
                         >
                           <NavIcon>{icons[child.icon]}</NavIcon>
-                          <NavLabel $collapsed={collapsed}>{child.label}</NavLabel>
+                          <NavLabel $collapsed={sidebarCollapsed}>{child.label}</NavLabel>
                         </SubNavItem>
                       ))}
                     </React.Fragment>
@@ -885,15 +999,15 @@ useEffect(() => {
                   <NavItem
                     key={item.to}
                     to={item.to}
-                    $collapsed={collapsed}
+                    $collapsed={sidebarCollapsed}
                     title={collapsed ? item.label : undefined}
                   >
                     <NavIcon>{icons[item.icon]}</NavIcon>
-                    <NavLabel $collapsed={collapsed}>{item.label}</NavLabel>
-                    {!collapsed && item.badge === 'active' && hasStrategy && (
+                    <NavLabel $collapsed={sidebarCollapsed}>{item.label}</NavLabel>
+                      {!sidebarCollapsed && item.badge === 'active' && hasStrategy && (
                       <ActiveBadge>Active</ActiveBadge>
                     )}
-                    {!collapsed && item.badge === 'soon' && (
+                      {!sidebarCollapsed && item.badge === 'soon' && (
                       <ComingSoonBadge>Soon</ComingSoonBadge>
                     )}
                   </NavItem>
@@ -903,22 +1017,22 @@ useEffect(() => {
           ))}
         </Nav>
 
-        <SidebarBottom $collapsed={collapsed}>
+        <SidebarBottom $collapsed={sidebarCollapsed}>
           <ProfileTrigger
             type="button"
-            $collapsed={collapsed}
+            $collapsed={sidebarCollapsed}
             title="View account information"
             aria-expanded={profilePanelOpen}
             onClick={() => setProfilePanelOpen(true)}
           >
             <Avatar title={displayName}>{initials}</Avatar>
-            <UserInfo $collapsed={collapsed}>
+            <UserInfo $collapsed={sidebarCollapsed}>
               <UserName>{displayName}</UserName>
               <UserRole>{user?.email || ''}</UserRole>
             </UserInfo>
           </ProfileTrigger>
-          <SidebarHomeLink $collapsed={collapsed} to="/" title="Go to Homepage">
-            {collapsed ? 'Home' : 'Go to Homepage'}
+          <SidebarHomeLink $collapsed={sidebarCollapsed} to="/" title="Go to Homepage">
+            {sidebarCollapsed ? 'Home' : 'Go to Homepage'}
           </SidebarHomeLink>
         </SidebarBottom>
       </Sidebar>
@@ -932,8 +1046,16 @@ useEffect(() => {
       {/* ── Right pane ── */}
       <RightPane>
         <TopBar>
+          <MobileMenuBtn
+            type="button"
+            title="Open menu"
+            aria-label="Open navigation menu"
+            onClick={() => setMobileNavOpen(true)}
+          >
+            {icons.menu}
+          </MobileMenuBtn>
           <PageTitle>{pageTitle}</PageTitle>
-          {currentTenant && <TenantBadge>{currentTenant.name}</TenantBadge>}
+          {currentTenant && <TenantBadge title={currentTenant.name}>{currentTenant.name}</TenantBadge>}
           <Spacer />
           <SearchBox>
             {icons.search}
@@ -941,7 +1063,8 @@ useEffect(() => {
           </SearchBox>
           <IconBtn title="Notifications">{icons.bell}</IconBtn>
           <NewLeadBtn onClick={() => navigate('/crm/leads')}>
-            {icons.plus} New Lead
+            {icons.plus}
+            <span>New Lead</span>
           </NewLeadBtn>
         </TopBar>
 

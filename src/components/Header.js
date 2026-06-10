@@ -23,16 +23,23 @@ const HeaderContainer = styled.header`
 
 const NavContainer = styled.div`
   margin: 0 auto;
-  padding: 0 20px;
+  padding: 0 clamp(12px, 3vw, 20px);
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 8px;
+  min-height: 64px;
 `;
 
 const LeftSection = styled.div`
   display: flex;
   align-items: center;
   gap: 3rem;
+  min-width: 0;
+
+  @media (max-width: 1024px) {
+    gap: 0.75rem;
+  }
 `;
 
 const Logo = styled(Link)`
@@ -87,6 +94,147 @@ const RightSection = styled.div`
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  flex-shrink: 0;
+
+  @media (max-width: 480px) {
+    gap: 0.25rem;
+  }
+`;
+
+const MenuToggle = styled.button`
+  display: none;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 10px;
+  border-radius: 6px;
+  color: white;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+
+  &:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+  }
+
+  @media (max-width: 1024px) {
+    display: flex;
+  }
+`;
+
+const BtnLabel = styled.span`
+  @media (max-width: 640px) {
+    display: none;
+  }
+`;
+
+const MobileNavBackdrop = styled.div`
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  z-index: 1100;
+  display: ${({ $open }) => ($open ? 'block' : 'none')};
+`;
+
+const MobileNavDrawer = styled.nav`
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: min(300px, 86vw);
+  background: #0a0a0a;
+  border-right: 1px solid rgba(255, 255, 255, 0.12);
+  z-index: 1101;
+  transform: translateX(${({ $open }) => ($open ? '0' : '-100%')});
+  transition: transform 0.25s ease;
+  display: flex;
+  flex-direction: column;
+  padding: 1rem 0 1.5rem;
+  overflow-y: auto;
+`;
+
+const MobileNavHeader = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 1rem 1rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  margin-bottom: 0.5rem;
+`;
+
+const MobileNavTitle = styled.span`
+  color: white;
+  font-size: 1.1rem;
+  font-weight: 600;
+`;
+
+const MobileCloseBtn = styled.button`
+  background: none;
+  border: none;
+  color: white;
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  &:hover {
+    background: rgba(255, 255, 255, 0.1);
+  }
+`;
+
+const MobileNavLink = styled(Link)`
+  color: white;
+  text-decoration: none;
+  font-size: 1.125rem;
+  padding: 14px 1.25rem;
+  display: block;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  &.active {
+    color: ${props => props.theme?.colors?.primary || '#00C896'};
+    background: rgba(0, 200, 150, 0.08);
+  }
+  &:hover {
+    background: rgba(255, 255, 255, 0.06);
+  }
+`;
+
+const MobileNavActions = styled.div`
+  margin-top: auto;
+  padding: 1rem 1.25rem 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+`;
+
+const MobileActionBtn = styled(Link)`
+  display: block;
+  text-align: center;
+  text-decoration: none;
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 1rem;
+  background: ${({ $primary, theme }) =>
+    $primary ? theme?.colors?.primary || '#00C896' : 'transparent'};
+  color: ${({ $primary }) => ($primary ? '#fff' : 'white')};
+  border: 1px solid
+    ${({ $primary, theme }) =>
+      $primary ? 'transparent' : 'rgba(255, 255, 255, 0.25)'};
+`;
+
+const MobileActionButton = styled.button`
+  display: block;
+  width: 100%;
+  text-align: center;
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 1rem;
+  background: transparent;
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  cursor: pointer;
 `;
 
 const StyledSearchIcon = styled.div`
@@ -154,8 +302,18 @@ const StartTrialButton = styled(Link)`
   font-size: 1.25rem;
   font-weight: 500;
   transition: all 0.2s ease;
+  white-space: nowrap;
   &:hover {
     background-color: #00B085;
+  }
+
+  @media (max-width: 640px) {
+    padding: 10px 12px;
+    font-size: 0.95rem;
+  }
+
+  @media (max-width: 1024px) {
+    display: none;
   }
 `;
 
@@ -274,6 +432,7 @@ const Header = () => {
   const [isVisible, setIsVisible] = useState(true);
   const [lastScrollY, setLastScrollY] = useState(0);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const searchInputRef = useRef(null);
 
@@ -308,6 +467,19 @@ const Header = () => {
       window.clearTimeout(t);
     };
   }, [searchOpen]);
+
+  useEffect(() => {
+    setMobileNavOpen(false);
+  }, [location.pathname]);
+
+  useEffect(() => {
+    if (!mobileNavOpen) return undefined;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [mobileNavOpen]);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -445,6 +617,22 @@ const Header = () => {
       )}
       <NavContainer>
         <LeftSection>
+          <MenuToggle
+            type="button"
+            aria-label={mobileNavOpen ? 'Close menu' : 'Open menu'}
+            aria-expanded={mobileNavOpen}
+            onClick={() => setMobileNavOpen((v) => !v)}
+          >
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              {mobileNavOpen ? (
+                <path d="M6 6l12 12M18 6L6 18" strokeLinecap="round" />
+              ) : (
+                <>
+                  <path d="M4 7h16M4 12h16M4 17h16" strokeLinecap="round" />
+                </>
+              )}
+            </svg>
+          </MenuToggle>
           <Logo to="/">
             <LogoImage 
               src={transparentLogo} 
@@ -479,13 +667,13 @@ const Header = () => {
             aria-controls="site-search-dialog"
           >
             <StyledSearchIcon />
-            Search
+            <BtnLabel>Search</BtnLabel>
           </SearchButton>
           {user ? (
             <>
               <SignInButton onClick={handleLogout}>
                 <StyledUserIcon />
-                Logout
+                <BtnLabel>Logout</BtnLabel>
               </SignInButton>
               <StartTrialButton to="/crm/dashboard">CRM</StartTrialButton>
             </>
@@ -493,7 +681,7 @@ const Header = () => {
             <>
               <SignInButton as={Link} to="/login">
                 <StyledUserIcon />
-                Sign in
+                <BtnLabel>Sign in</BtnLabel>
               </SignInButton>
               <StartTrialButton to="/signup">Start Free Trial</StartTrialButton>
             </>
@@ -501,6 +689,57 @@ const Header = () => {
         </RightSection>
       </NavContainer>
     </HeaderContainer>
+    {mobileNavOpen && (
+      <>
+        <MobileNavBackdrop
+          $open={mobileNavOpen}
+          onClick={() => setMobileNavOpen(false)}
+          aria-hidden="true"
+        />
+        <MobileNavDrawer $open={mobileNavOpen} aria-label="Mobile navigation">
+          <MobileNavHeader>
+            <MobileNavTitle>Menu</MobileNavTitle>
+            <MobileCloseBtn type="button" onClick={() => setMobileNavOpen(false)} aria-label="Close menu">
+              ×
+            </MobileCloseBtn>
+          </MobileNavHeader>
+          {mainNavItems.map((item) => (
+            <MobileNavLink
+              key={item.path}
+              to={item.path}
+              className={location.pathname === item.path ? 'active' : ''}
+              onClick={() => setMobileNavOpen(false)}
+            >
+              {item.label}
+            </MobileNavLink>
+          ))}
+          <MobileNavActions>
+            <MobileActionButton type="button" onClick={() => { openSiteSearch(); setMobileNavOpen(false); }}>
+              Search site
+            </MobileActionButton>
+            {user ? (
+              <>
+                <MobileActionBtn to="/crm/dashboard" $primary onClick={() => setMobileNavOpen(false)}>
+                  Open CRM
+                </MobileActionBtn>
+                <MobileActionButton type="button" onClick={() => { handleLogout(); setMobileNavOpen(false); }}>
+                  Logout
+                </MobileActionButton>
+              </>
+            ) : (
+              <>
+                <MobileActionBtn to="/signup" $primary onClick={() => setMobileNavOpen(false)}>
+                  Start Free Trial
+                </MobileActionBtn>
+                <MobileActionBtn to="/login" onClick={() => setMobileNavOpen(false)}>
+                  Sign in
+                </MobileActionBtn>
+              </>
+            )}
+          </MobileNavActions>
+        </MobileNavDrawer>
+      </>
+    )}
     {searchModal}
     </>
   );

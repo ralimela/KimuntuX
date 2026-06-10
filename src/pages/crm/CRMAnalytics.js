@@ -22,7 +22,11 @@ const fmtMoney = n => n ? '$' + Number(n).toLocaleString(undefined, { maximumFra
 const fadeIn = keyframes`from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}`;
 
 // ── Layout ────────────────────────────────────────────────────────────────────
-const Page = styled.div`padding:20px;animation:${fadeIn} .2s ease;`;
+const Page = styled.div`
+  padding:20px;animation:${fadeIn} .2s ease;
+  @media (max-width: 768px) { padding: 16px 12px; }
+  @media (max-width: 480px) { padding: 12px 10px; }
+`;
 
 // ── KPI Row ───────────────────────────────────────────────────────────────────
 const KpiRow = styled.div`

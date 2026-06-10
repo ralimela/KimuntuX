@@ -10,6 +10,8 @@ const Page = styled.div`
   display: flex;
   flex-direction: column;
   gap: 1.75rem;
+  @media (max-width: 768px) { padding: 16px 12px; gap: 1.25rem; }
+  @media (max-width: 480px) { padding: 12px 10px; }
 `;
 
 const Hero = styled.section`

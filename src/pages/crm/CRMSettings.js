@@ -32,7 +32,11 @@ const initials = name => name.split(' ').map(w => w[0]).join('').toUpperCase().s
 const fadeIn = keyframes`from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}`;
 
 // ── Layout ────────────────────────────────────────────────────────────────────
-const Page = styled.div`padding:20px;animation:${fadeIn} .2s ease;`;
+const Page = styled.div`
+  padding:20px;animation:${fadeIn} .2s ease;
+  @media (max-width: 768px) { padding: 16px 12px; }
+  @media (max-width: 480px) { padding: 12px 10px; }
+`;
 
 // ── Section header ────────────────────────────────────────────────────────────
 const SectionTitle = styled.h2`font-size:15px;font-weight:700;color:${C.text};margin:0 0 4px 0;`;

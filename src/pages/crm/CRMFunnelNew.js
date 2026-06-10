@@ -16,6 +16,8 @@ const Page = styled.div`
   max-width: 700px;
   margin: 0 auto;
   animation: ${fadeIn} .2s ease;
+  @media (max-width: 768px) { padding: 16px 12px; }
+  @media (max-width: 480px) { padding: 12px 10px; }
 `;
 
 const BackRow = styled.div`margin-bottom: 20px;`;

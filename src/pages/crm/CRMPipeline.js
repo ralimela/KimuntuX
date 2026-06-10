@@ -26,6 +26,8 @@ const fadeIn = keyframes`from{opacity:0}to{opacity:1}`;
 const Page = styled.div`
   padding:20px;height:calc(100vh - 64px);display:flex;flex-direction:column;
   animation:${fadeIn} .2s ease;
+  @media (max-width: 768px) { padding: 16px 12px; }
+  @media (max-width: 480px) { padding: 12px 10px; }
 `;
 const BoardScroll = styled.div`
   flex:1;overflow-x:auto;overflow-y:hidden;

@@ -65,6 +65,8 @@ const fadeIn = keyframes`
 const Page = styled.div`
   padding: 24px;
   animation: ${fadeIn} 0.25s ease;
+  @media (max-width: 768px) { padding: 16px 12px; }
+  @media (max-width: 480px) { padding: 12px 10px; }
 `;
 
 const SectionTitle = styled.h2`
@@ -269,6 +271,14 @@ const PipelineGrid = styled.div`
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 8px;
+
+  @media (max-width: 768px) {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  @media (max-width: 480px) {
+    grid-template-columns: 1fr;
+  }
 `;
 
 const PipelineStageCard = styled.div`

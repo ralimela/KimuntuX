@@ -9,7 +9,11 @@ const pulse = keyframes`0%,100%{opacity:1}50%{opacity:.4}`;
 const spin = keyframes`to{transform:rotate(360deg)}`;
 
 // ── Shared layout ─────────────────────────────────────────────────────────────
-const Page = styled.div`padding:20px;animation:${fadeIn} .25s ease;`;
+const Page = styled.div`
+  padding:20px;animation:${fadeIn} .25s ease;
+  @media (max-width: 768px) { padding: 16px 12px; }
+  @media (max-width: 480px) { padding: 12px 10px; }
+`;
 const SectionTitle = styled.h2`
   font-size:22px;font-weight:800;color:${C.text};margin:0 0 4px 0;
 `;

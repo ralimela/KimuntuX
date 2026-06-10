@@ -11,7 +11,13 @@ const LoginContainer = styled.div`
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 2rem;
+  padding: 1.25rem;
+
+  @media (max-width: 480px) {
+    padding: 1rem 0.75rem;
+    align-items: flex-start;
+    padding-top: 2rem;
+  }
 `;
 
 const LoginCard = styled.div`
@@ -22,6 +28,11 @@ const LoginCard = styled.div`
   box-shadow: 0 24px 80px rgba(0, 0, 0, 0.65);
   width: 100%;
   max-width: 400px;
+
+  @media (max-width: 480px) {
+    padding: 1.25rem 1.25rem 1.75rem;
+    border-radius: 12px;
+  }
   position: relative;
   overflow: hidden;
 
@@ -46,11 +57,19 @@ const Logo = styled.div`
     max-width: 100%;
     display: inline-block;
     background: transparent;
+
+    @media (max-width: 480px) {
+      height: 120px;
+    }
   }
 `;
 
 const Title = styled.h1`
   font-size: 2rem;
+
+  @media (max-width: 480px) {
+    font-size: 1.65rem;
+  }
   font-weight: 700;
   background: linear-gradient(135deg, ${props => props.theme?.colors?.primary || '#00C896'}, ${props => props.theme?.colors?.accent || '#DAA520'});
   -webkit-background-clip: text;

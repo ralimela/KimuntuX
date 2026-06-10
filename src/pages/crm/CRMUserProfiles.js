@@ -16,6 +16,8 @@ const Page = styled.div`
   padding: 24px;
   animation: ${fadeIn} 0.25s ease;
   font-family: ${C.fontFamily};
+  @media (max-width: 768px) { padding: 16px 12px; }
+  @media (max-width: 480px) { padding: 12px 10px; }
 `;
 
 const Title = styled.h1`

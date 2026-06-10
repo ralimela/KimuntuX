@@ -25,12 +25,26 @@ const slideUp = keyframes`from{opacity:0;transform:translateY(6px)}to{opacity:1;
 // ── Layout ────────────────────────────────────────────────────────────────────
 const Page = styled.div`
   display:flex;height:calc(100vh - 64px);animation:${fadeIn} .2s ease;overflow:hidden;
+
+  @media (max-width: 768px) {
+    flex-direction: column;
+    height: auto;
+    min-height: calc(100vh - 64px);
+    overflow: visible;
+  }
 `;
 
 // ── Left Panel ────────────────────────────────────────────────────────────────
 const LeftPanel = styled.div`
   width:360px;flex-shrink:0;border-right:1px solid ${C.border};
   display:flex;flex-direction:column;background:${C.surface};
+
+  @media (max-width: 768px) {
+    width: 100%;
+    border-right: none;
+    border-bottom: 1px solid ${C.border};
+    max-height: 45vh;
+  }
 `;
 const SearchBar = styled.div`padding:12px;border-bottom:1px solid ${C.border};flex-shrink:0;`;
 const SearchInput = styled.input`
@@ -79,6 +93,10 @@ const EmptyList = styled.div`
 // ── Right Panel ───────────────────────────────────────────────────────────────
 const RightPanel = styled.div`
   flex:1;display:flex;flex-direction:column;background:${C.bg};min-width:0;
+
+  @media (max-width: 768px) {
+    min-height: 50vh;
+  }
 `;
 const EmptyState = styled.div`
   flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;

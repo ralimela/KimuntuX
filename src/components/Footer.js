@@ -46,6 +46,10 @@ const FooterSection = styled.div`
     color: white;
     margin-bottom: 1.25rem;
     font-size: 1.75rem;
+
+    @media (max-width: 768px) {
+      font-size: 1.35rem;
+    }
     font-weight: 600;
     font-family: ${props => props.theme?.fonts?.title || 'Poppins, sans-serif'};
     letter-spacing: 0.5px;
@@ -80,6 +84,10 @@ const FooterSection = styled.div`
     opacity: 0.75;
     text-decoration: none;
     font-size: 1.25rem;
+
+    @media (max-width: 768px) {
+      font-size: 1.05rem;
+    }
     transition: all 0.2s ease;
     display: inline-block;
     position: relative;

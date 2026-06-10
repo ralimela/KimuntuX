@@ -51,7 +51,12 @@ const fadeIn = keyframes`from{opacity:0;transform:translateY(4px)}to{opacity:1;t
 const slideIn = keyframes`from{transform:translateX(100%)}to{transform:translateX(0)}`;
 
 // ── Layout ────────────────────────────────────────────────────────────────────
-const Page = styled.div`padding:20px;animation:${fadeIn} .2s ease;`;
+const Page = styled.div`
+  padding: 20px;
+  animation: ${fadeIn} .2s ease;
+  @media (max-width: 768px) { padding: 16px 12px; }
+  @media (max-width: 480px) { padding: 12px 10px; }
+`;
 
 // ── Filter bar ────────────────────────────────────────────────────────────────
 const FilterBar = styled.div`
@@ -77,7 +82,7 @@ const CountLabel = styled.span`
 
 // ── Table ─────────────────────────────────────────────────────────────────────
 const TableWrap = styled.div`
-  background:${C.card};border:1px solid ${C.border};border-radius:12px;overflow:hidden;
+  background:${C.card};border:1px solid ${C.border};border-radius:12px;overflow-x:auto;-webkit-overflow-scrolling:touch;
 `;
 const Table = styled.table`width:100%;border-collapse:collapse;`;
 const Th = styled.th`

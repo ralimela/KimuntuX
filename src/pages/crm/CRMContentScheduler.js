@@ -209,6 +209,8 @@ const Page = styled.div`
     radial-gradient(circle at top right, rgba(139, 92, 246, 0.08), transparent 26%),
     ${C.bg};
   animation: ${fadeIn} 0.22s ease;
+  @media (max-width: 768px) { padding: 16px 12px; }
+  @media (max-width: 480px) { padding: 12px 10px; }
 `;
 
 const PageInner = styled.div`

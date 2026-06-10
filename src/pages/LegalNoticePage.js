@@ -9,6 +9,14 @@ const Main = styled.main`
   margin: 0 auto;
   color: ${p => p.theme?.colors?.text || '#111827'};
   line-height: 1.65;
+
+  @media (max-width: 768px) {
+    padding: 100px 1.25rem 3rem;
+  }
+
+  @media (max-width: 480px) {
+    padding: 88px 1rem 2.5rem;
+  }
 `;
 
 const Title = styled.h1`

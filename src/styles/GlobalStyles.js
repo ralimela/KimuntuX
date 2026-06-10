@@ -9,12 +9,34 @@ export const GlobalStyles = createGlobalStyle`
     box-sizing: border-box;
   }
 
+  html {
+    overflow-x: hidden;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+
   body {
     font-family: ${props => props.theme?.fonts?.body || 'Roboto, sans-serif'};
     background-color: ${props => props.theme?.colors?.background || '#FFFFFF'};
     color: ${props => props.theme?.colors?.text || '#111111'};
     line-height: 1.6;
     transition: all 0.3s ease;
+    overflow-x: hidden;
+    min-width: 0;
+  }
+
+  #root,
+  .App {
+    width: 100%;
+    min-width: 0;
+    overflow-x: hidden;
+  }
+
+  img,
+  video,
+  svg {
+    max-width: 100%;
+    height: auto;
   }
 
   h1, h2, h3, h4, h5, h6 {
@@ -64,7 +86,8 @@ export const GlobalStyles = createGlobalStyle`
   .container {
     max-width: 1200px;
     margin: 0 auto;
-    padding: 0 20px;
+    padding: 0 clamp(16px, 4vw, 40px);
+    width: 100%;
   }
 
   .card {
@@ -152,6 +175,20 @@ export const GlobalStyles = createGlobalStyle`
     opacity: 0.8;
   }
 
+  @media (max-width: 1024px) {
+    h1 {
+      font-size: clamp(1.75rem, 4.5vw, 2.5rem);
+    }
+
+    h2 {
+      font-size: clamp(1.35rem, 3.5vw, 2rem);
+    }
+
+    h3 {
+      font-size: clamp(1.15rem, 2.5vw, 1.5rem);
+    }
+  }
+
   @media (max-width: 768px) {
     .container {
       padding: 0 16px;
@@ -169,6 +206,20 @@ export const GlobalStyles = createGlobalStyle`
     .grid-3,
     .grid-4 {
       grid-template-columns: 1fr;
+    }
+
+    button {
+      padding: 10px 18px;
+    }
+  }
+
+  @media (max-width: 480px) {
+    h1 {
+      font-size: 1.75rem;
+    }
+
+    h2 {
+      font-size: 1.35rem;
     }
   }
 `;

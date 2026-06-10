@@ -36,7 +36,11 @@ const fmtGravity = n => (n != null) ? Number(n).toFixed(1) : '—';
 const fadeIn = keyframes`from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}`;
 
 // ── Styled components ─────────────────────────────────────────────────────────
-const Page = styled.div`padding:20px;animation:${fadeIn} .2s ease;`;
+const Page = styled.div`
+  padding:20px;animation:${fadeIn} .2s ease;
+  @media (max-width: 768px) { padding: 16px 12px; }
+  @media (max-width: 480px) { padding: 12px 10px; }
+`;
 
 const SectionCard = styled.div`
   background:${C.card};border:1px solid ${C.border};border-radius:12px;

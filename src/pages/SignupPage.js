@@ -33,6 +33,11 @@ const SignupContainer = styled.div`
   align-items: center;
   justify-content: center;
   padding: 2rem 1rem 3rem;
+
+  @media (max-width: 480px) {
+    padding: 1.25rem 0.75rem 2rem;
+    align-items: flex-start;
+  }
 `;
 
 const SignupCard = styled.div`
@@ -43,6 +48,11 @@ const SignupCard = styled.div`
   box-shadow: 0 24px 80px rgba(0, 0, 0, 0.65);
   width: 100%;
   max-width: 520px;
+
+  @media (max-width: 480px) {
+    padding: 1.25rem 1rem 1.75rem;
+    border-radius: 12px;
+  }
   position: relative;
   overflow: hidden;
 
@@ -67,11 +77,19 @@ const Logo = styled.div`
     max-width: 100%;
     display: inline-block;
     background: transparent;
+
+    @media (max-width: 480px) {
+      height: 120px;
+    }
   }
 `;
 
 const Title = styled.h1`
   font-size: 2rem;
+
+  @media (max-width: 480px) {
+    font-size: 1.65rem;
+  }
   font-weight: 700;
   background: linear-gradient(135deg, ${props => props.theme?.colors?.primary || '#00C896'}, ${props => props.theme?.colors?.accent || '#DAA520'});
   -webkit-background-clip: text;
