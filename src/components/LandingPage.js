@@ -2,8 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import styled from 'styled-components';
 import { useTheme } from '../contexts/ThemeContext';
 import { Link } from 'react-router-dom';
-import kimuntuIntroVideo from '../assets/Video_homepage_KimuX.mp4';
-import kimuntuAnimationVideo from '../assets/Video_Kimux .mp4';
+import { HOMEPAGE_VIDEOS, HOMEPAGE_VIDEO_FALLBACKS } from '../config/homepageVideos';
 import backgroundDesign from '../assets/background_design.jpg';
 import whyChooseUsBackground from '../assets/WHY Choose us backgound.png';
 import onlineBoutiqueImage from '../assets/Online_Boutique.jpeg';
@@ -96,7 +95,9 @@ const HeroContent = styled.div`
 
 const AnimationVideoContainer = styled.div`
   width: 100%;
+  min-height: 320px;
   height: 100vh;
+  max-height: 900px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -105,7 +106,7 @@ const AnimationVideoContainer = styled.div`
   animation: fadeInBlend 1.5s ease-in-out 0.5s forwards;
   overflow: hidden;
   position: relative;
-  padding-right: 24px;
+  padding: 0 24px;
   box-sizing: border-box;
   
   @keyframes fadeInBlend {
@@ -120,25 +121,30 @@ const AnimationVideoContainer = styled.div`
   }
   
   @media (max-width: 968px) {
-    height: 400px;
+    height: min(52vh, 420px);
+    min-height: 280px;
+    max-height: none;
     order: -1;
-    padding-right: 0;
+    padding: 0 16px;
   }
   
   @media (max-width: 768px) {
-    height: 300px;
+    height: min(48vh, 360px);
+    min-height: 240px;
   }
 `;
 
 const AnimationVideo = styled.video`
   width: 100%;
-  height: auto;
-  max-height: 100vh;
+  height: 100%;
+  max-height: 100%;
   object-fit: contain;
+  object-position: center;
   position: relative;
   z-index: 0;
   display: block;
   border-radius: 16px;
+  background: #000000;
 `;
 
 const Container = styled.div`
@@ -475,13 +481,16 @@ const PreviewVideoContainer = styled.div`
   overflow: hidden;
   background-color: #000;
   border-radius: 12px;
+  aspect-ratio: 16 / 9;
 `;
 
 const PreviewVideo = styled.video`
   width: 100%;
-  height: auto;
+  height: 100%;
   display: block;
   object-fit: contain;
+  object-position: center;
+  background: #000000;
 `;
 
 // Features Section with Sliding Animation
@@ -578,13 +587,11 @@ const FeaturesSliderContainer = styled.div`
   overflow: hidden;
   position: relative;
   width: 100vw;
+  max-width: 100vw;
   margin-left: calc(-50vw + 50%);
   padding: 20px 0;
-  
-  @media (max-width: 968px) {
-    width: 100%;
-    margin-left: 0;
-  }
+  -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 4%, #000 96%, transparent 100%);
+  mask-image: linear-gradient(90deg, transparent 0%, #000 4%, #000 96%, transparent 100%);
 `;
 
 const FeaturesSlider = styled.div`
@@ -592,6 +599,7 @@ const FeaturesSlider = styled.div`
   gap: 2rem;
   animation: slideFeatures 120s linear infinite;
   width: fit-content;
+  will-change: transform;
   
   @keyframes slideFeatures {
     0% {
@@ -605,13 +613,15 @@ const FeaturesSlider = styled.div`
   &:hover {
     animation-play-state: paused;
   }
-  
-  @media (max-width: 968px) {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-    animation: none;
-    gap: 1.5rem;
-    transform: none !important;
+
+  @media (max-width: 768px) {
+    gap: 1.25rem;
+    animation-duration: 90s;
+  }
+
+  @media (max-width: 480px) {
+    gap: 1rem;
+    animation-duration: 70s;
   }
 `;
 
@@ -646,9 +656,16 @@ const FeatureCard = styled.div`
     border-color: ${p => p.theme?.colors?.primary || '#00C896'};
   }
   
-  @media (max-width: 968px) {
-    min-width: auto;
-    max-width: 600px;
+  @media (max-width: 768px) {
+    min-width: 280px;
+    max-width: 300px;
+    padding: 1.5rem;
+  }
+
+  @media (max-width: 480px) {
+    min-width: 260px;
+    max-width: 280px;
+    padding: 1.25rem;
   }
 `;
 
@@ -994,15 +1011,12 @@ const GrowthTeamColumnText = styled.p`
 const GrowthTeamSliderContainer = styled.div`
   overflow: hidden;
   width: 100vw;
+  max-width: 100vw;
   margin-left: calc(-50vw + 50%);
   margin-right: calc(-50vw + 50%);
   margin-top: 2.75rem;
-  
-  @media (max-width: 1200px) {
-    width: 100%;
-    margin-left: 0;
-    margin-right: 0;
-  }
+  -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 4%, #000 96%, transparent 100%);
+  mask-image: linear-gradient(90deg, transparent 0%, #000 4%, #000 96%, transparent 100%);
 `;
 
 const GrowthTeamSlider = styled.div`
@@ -1010,6 +1024,7 @@ const GrowthTeamSlider = styled.div`
   gap: 1.75rem;
   width: fit-content;
   animation: slideGrowthTeam 45s linear infinite;
+  will-change: transform;
   
   @keyframes slideGrowthTeam {
     0% {
@@ -1023,13 +1038,15 @@ const GrowthTeamSlider = styled.div`
   &:hover {
     animation-play-state: paused;
   }
-  
-  @media (max-width: 900px) {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 1.5rem;
-    animation: none;
-    width: 100%;
+
+  @media (max-width: 768px) {
+    gap: 1.25rem;
+    animation-duration: 35s;
+  }
+
+  @media (max-width: 480px) {
+    gap: 1rem;
+    animation-duration: 28s;
   }
 `;
 
@@ -1040,7 +1057,7 @@ const GrowthTeamCard = styled.div`
   padding: 1.75rem;
   box-shadow: 0 10px 24px rgba(0, 0, 0, 0.06);
   transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
-  width: 100%;
+  flex-shrink: 0;
   min-width: 320px;
   max-width: 360px;
   text-align: center;
@@ -1049,6 +1066,18 @@ const GrowthTeamCard = styled.div`
     transform: translateY(-4px);
     box-shadow: 0 18px 36px rgba(0, 0, 0, 0.1);
     border-color: ${p => (p.theme?.colors?.primary || '#00C896')}55;
+  }
+
+  @media (max-width: 768px) {
+    min-width: 280px;
+    max-width: 300px;
+    padding: 1.5rem;
+  }
+
+  @media (max-width: 480px) {
+    min-width: 260px;
+    max-width: 280px;
+    padding: 1.25rem;
   }
 `;
 
@@ -1246,13 +1275,20 @@ const FAQPreviewButton = styled(Link)`
 const StartGrowingSection = styled(Section)`
   background: #ffffff;
   color: #000000;
-  padding-top: 130px;
-  padding-bottom: 80px;
+  padding: 80px 0;
 
   @media (max-width: 768px) {
-    padding-top: 90px;
-    padding-bottom: 60px;
+    padding: 60px 0;
   }
+`;
+
+const StartGrowingContainer = styled(Container)`
+  max-width: 920px;
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: clamp(16px, 4vw, 40px);
+  padding-right: clamp(16px, 4vw, 40px);
+  box-sizing: border-box;
 `;
 
 const StartGrowingCard = styled.div`
@@ -1261,86 +1297,79 @@ const StartGrowingCard = styled.div`
   border-left: 4px solid ${p => p.theme?.colors?.primary || '#00C896'};
   border-right: 4px solid ${p => p.theme?.colors?.primary || '#00C896'};
   border-radius: 14px;
-  padding: 2.5rem 2.75rem;
+  padding: clamp(1.5rem, 4vw, 2.5rem) clamp(1.25rem, 4vw, 2.75rem);
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 1.5rem;
+  gap: clamp(1.25rem, 3vw, 2rem);
   text-align: center;
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.25);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.12);
   width: 100%;
-  
-  @media (max-width: 968px) {
-    padding: 2rem 1.5rem;
-  }
+  max-width: 100%;
+  margin: 0 auto;
+  box-sizing: border-box;
+  overflow: hidden;
+`;
+
+const StartGrowingIntro = styled.div`
+  width: 100%;
+  max-width: 100%;
 `;
 
 const StartGrowingTitle = styled.h2`
   margin: 0 0 0.75rem;
-  font-size: 2.9rem;
+  font-size: clamp(1.75rem, 4vw, 2.9rem);
   font-weight: 700;
   font-family: ${p => p.theme?.fonts?.title || 'Poppins, sans-serif'};
   line-height: 1.2;
-  
-  @media (max-width: 768px) {
-    font-size: 2.1rem;
-  }
 `;
 
 const StartGrowingSubtitle = styled.p`
-  margin: 0 0 1.5rem;
-  font-size: 1.8rem;
+  margin: 0 0 1.25rem;
+  font-size: clamp(1rem, 2.2vw, 1.8rem);
   color: #111111;
-  opacity: 1;
+  line-height: 1.45;
   
   span {
     color: ${p => p.theme?.colors?.primary || '#00C896'};
     font-weight: 700;
   }
-  
-  @media (max-width: 768px) {
-    font-size: 1.1rem;
-  }
 `;
 
 const StartGrowingDescription = styled.p`
-  margin: 0;
-  font-size: 1.45rem;
-  line-height: 1.8;
+  margin: 0 auto;
+  max-width: 720px;
+  font-size: clamp(1rem, 1.8vw, 1.45rem);
+  line-height: 1.75;
   color: #111111;
-  opacity: 1;
 `;
 
 const StartGrowingCTA = styled.div`
-  background: transparent;
-  border: none;
-  border-radius: 0;
-  padding: 0;
-  display: grid;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   gap: 1.25rem;
   width: 100%;
-  max-width: 900px;
+  max-width: 100%;
   text-align: center;
-  justify-items: center;
 `;
 
 const StartGrowingCTATitle = styled.h3`
   margin: 0;
-  font-size: 2rem;
+  width: 100%;
+  font-size: clamp(1.35rem, 2.5vw, 2rem);
   font-weight: 700;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
   color: #000000;
-  justify-content: center;
+  text-align: center;
+  letter-spacing: 0.04em;
 `;
 
 const StartGrowingCTAText = styled.p`
-  margin: 0;
-  font-size: 1.45rem;
-  line-height: 1.7;
+  margin: 0 auto;
+  max-width: 640px;
+  font-size: clamp(1rem, 1.8vw, 1.45rem);
+  line-height: 1.65;
   color: #111111;
-  opacity: 1;
   text-align: center;
 `;
 
@@ -1348,29 +1377,38 @@ const StartGrowingList = styled.ul`
   list-style: none;
   margin: 0;
   padding: 0;
-  display: flex;
-  flex-wrap: nowrap;
-  justify-content: space-between;
-  gap: 1rem;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
   width: 100%;
   max-width: 100%;
   box-sizing: border-box;
+
+  @media (min-width: 900px) {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  @media (max-width: 400px) {
+    grid-template-columns: 1fr;
+  }
 `;
 
 const StartGrowingListItem = styled.li`
-  display: inline-flex;
+  display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.1rem;
+  font-size: clamp(0.7rem, 1.4vw, 0.95rem);
   font-weight: 600;
   color: #0b0b0b;
   background: rgba(0, 200, 150, 0.12);
   border: 1px solid rgba(0, 200, 150, 0.55);
   border-radius: 999px;
-  padding: 0.6rem 1.6rem;
+  padding: 0.55rem 0.85rem;
   text-transform: uppercase;
-  white-space: nowrap;
-  flex: 1 1 0;
+  text-align: center;
+  line-height: 1.35;
+  word-break: break-word;
+  hyphens: auto;
   min-width: 0;
 `;
 
@@ -1378,13 +1416,15 @@ const StartGrowingButton = styled(Link)`
   background-color: ${p => p.theme?.colors?.primary || '#00C896'};
   color: white;
   text-decoration: none;
-  padding: 12px 24px;
+  padding: 12px 28px;
   border-radius: 8px;
-  font-size: 1.125rem;
+  font-size: clamp(1rem, 1.8vw, 1.125rem);
   font-weight: 600;
   width: fit-content;
-  margin: 0 auto;
+  max-width: 100%;
+  margin: 0.25rem auto 0;
   transition: all 0.2s ease;
+  text-align: center;
   
   &:hover {
     background-color: #00B085;
@@ -2154,14 +2194,22 @@ const LandingPage = () => {
           <AnimationVideoContainer>
             <AnimationVideo
               ref={animationVideoRef}
+              src={HOMEPAGE_VIDEOS.heroAnimation}
+              poster={backgroundDesign}
               autoPlay
               loop
               muted
               playsInline
-            >
-              <source src={kimuntuAnimationVideo} type="video/mp4" />
-              Your browser does not support the video tag.
-            </AnimationVideo>
+              preload="auto"
+              onError={(e) => {
+                const el = e.currentTarget;
+                if (el.dataset.fallbackApplied === 'true') return;
+                el.dataset.fallbackApplied = 'true';
+                el.src = HOMEPAGE_VIDEO_FALLBACKS.heroAnimation;
+                el.load();
+                el.play().catch(() => {});
+              }}
+            />
           </AnimationVideoContainer>
         </HeroContainer>
         <IntroSection>
@@ -2201,13 +2249,21 @@ const LandingPage = () => {
           <PreviewVideoContainer>
             <PreviewVideo
               ref={videoRef}
+              src={HOMEPAGE_VIDEOS.platformPreview}
+              poster={backgroundDesign}
               loop
               muted
               playsInline
-            >
-              <source src={kimuntuIntroVideo} type="video/mp4" />
-              Your browser does not support the video tag.
-            </PreviewVideo>
+              preload="metadata"
+              onError={(e) => {
+                const el = e.currentTarget;
+                if (el.dataset.fallbackApplied === 'true') return;
+                el.dataset.fallbackApplied = 'true';
+                el.src = HOMEPAGE_VIDEO_FALLBACKS.platformPreview;
+                el.load();
+                el.play().catch(() => {});
+              }}
+            />
           </PreviewVideoContainer>
         </Container>
       </PreviewSection>
@@ -2361,9 +2417,9 @@ const LandingPage = () => {
       </CryptoWealthSection>
 
       <StartGrowingSection>
-        <IntroContainer>
+        <StartGrowingContainer>
           <StartGrowingCard>
-            <div>
+            <StartGrowingIntro>
               <StartGrowingTitle>Start Growing with KimuX</StartGrowingTitle>
               <StartGrowingSubtitle>
                 One <span>Platform</span>. One <span>Subscription</span>. Unlimited <span>Growth Potential</span>.
@@ -2372,9 +2428,9 @@ const LandingPage = () => {
                 KimuX helps businesses, institutions, and innovators automate operations, increase revenue, and scale globally using AI, automation,
                 and blockchain—without complexity.
               </StartGrowingDescription>
-            </div>
+            </StartGrowingIntro>
             <StartGrowingCTA>
-              <StartGrowingCTATitle> GET STARTED</StartGrowingCTATitle>
+              <StartGrowingCTATitle>Get Started</StartGrowingCTATitle>
               <StartGrowingCTAText>Access AI-powered tools, backend fulfillment, and growth automation in minutes.</StartGrowingCTAText>
               <StartGrowingList>
                 {startGrowingBenefits.map((item) => (
@@ -2384,7 +2440,7 @@ const LandingPage = () => {
               <StartGrowingButton to="/pricing">Start Free Trial</StartGrowingButton>
             </StartGrowingCTA>
           </StartGrowingCard>
-        </IntroContainer>
+        </StartGrowingContainer>
       </StartGrowingSection>
 
       <FAQPreviewSection>
